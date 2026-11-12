@@ -1,7 +1,21 @@
 import { spawn, spawnSync } from 'node:child_process';
 
-// No ":" or "?" in here: less reads them as prompt syntax and cuts the prompt off at that character.
-export const PROMPT = 'scroll with arrows or mouse wheel, space = next page, / = search, q = quit  (%pb\\%)';
+// less ends a prompt at ":" or "?" outside a conditional, so neither can appear in these.
+const PERCENT = '  (%pb\\%)';
+/** Longest to shortest. less shows only the END of a prompt that is wider than the terminal, so pick one that fits. */
+const PROMPTS = [
+  'scroll with arrows or mouse wheel, space = next page, / = search, q = quit',
+  'arrows/wheel scroll, space page, / find, q quit',
+  'q quit, arrows scroll',
+];
+/** Columns the percentage takes at its widest: "  (100%)". */
+const PERCENT_COLUMNS = 8;
+
+/** The bottom-line help for a terminal `columns` wide: the fullest wording that fits on one row. */
+export function promptFor(columns = 80): string {
+  const text = PROMPTS.find((t) => t.length + PERCENT_COLUMNS <= columns) ?? PROMPTS[PROMPTS.length - 1]!;
+  return `${text}${PERCENT}`;
+}
 
 /** Terminal rows the text takes up once long lines wrap. */
 export function screenLines(text: string, columns: number): number {
@@ -27,7 +41,7 @@ export function page(text: string, opts: { rows?: number; columns?: number; mous
   if (opts.rows && screenLines(text, opts.columns ?? 80) < opts.rows) return Promise.resolve(false);
   const features = lessFeatures();
   if (!features) return Promise.resolve(false);
-  const args = ['-R', `-Ps${PROMPT}`];
+  const args = ['-R', `-Ps${promptFor(opts.columns)}`];
   if (opts.mouse !== false && features.mouse) args.push('--mouse');
   if (opts.mouse !== false && features.mouse && features.wheelLines) args.push('--wheel-lines=3');
   return new Promise((resolve) => {
