@@ -34,6 +34,14 @@ export async function readText(p: string): Promise<string | undefined> {
   }
 }
 
+/** A duration as people read it: "0.8s", "42s", "1m 12s". */
+export function fmtDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '0s';
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
+  const secs = Math.round(ms / 1000);
+  return secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
+}
+
 export function fmtBytes(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];

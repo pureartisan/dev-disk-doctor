@@ -1,5 +1,5 @@
 import { safeActions, type BatchItem, type BatchOutcome } from '../core/fix.js';
-import { fmtBytes, shellQuote } from '../core/util.js';
+import { fmtBytes, fmtDuration, shellQuote } from '../core/util.js';
 import type { Action, Finding, Risk, ScanResult } from '../core/types.js';
 import type { WorktreeAudit, WorktreeInfo } from '../worktrees/types.js';
 
@@ -9,7 +9,8 @@ export interface Style {
 
 function paint(style: Style) {
   const c = (code: string) => (s: string) => (style.color ? `\u001b[${code}m${s}\u001b[0m` : s);
-  return { bold: c('1'), dim: c('2'), red: c('31'), yellow: c('33'), green: c('32'), cyan: c('36') };
+  // Light blue (bright cyan) for hints about what to run next, so they stand out from the dim detail text.
+  return { bold: c('1'), dim: c('2'), red: c('31'), yellow: c('33'), green: c('32'), cyan: c('36'), hint: c('96'), hintBold: c('1;96') };
 }
 
 const RISK_LABEL: Record<Risk, string> = { safe: 'SAFE', review: 'REVIEW', danger: 'CAREFUL' };
@@ -32,7 +33,11 @@ function isRunnable(f: Finding, a: Action): boolean {
   return a.kind.type !== 'manual' && a.risk !== 'danger' && f.risk !== 'danger';
 }
 
-export function renderScan(r: ScanResult, style: Style, opts: { limit?: number; offset?: number; moreHint?: string; bin?: string } = {}): string {
+export function renderScan(
+  r: ScanResult,
+  style: Style,
+  opts: { limit?: number; offset?: number; moreHint?: string; bin?: string; /** Name `show` and `--all` in the footer when items are hidden. */ footerHint?: boolean } = {},
+): string {
   const bin = opts.bin ?? binName();
   const p = paint(style);
   const riskTag = (risk: Risk) => (risk === 'safe' ? p.green : risk === 'review' ? p.yellow : p.red)(`[${RISK_LABEL[risk]}]`);
@@ -57,18 +62,24 @@ export function renderScan(r: ScanResult, style: Style, opts: { limit?: number; 
   shown.forEach((f, i) => out.push(renderFinding(f, offset + i + 1, p, riskTag, bin)));
   const hidden = r.findings.length - offset - shown.length;
   if (offset > 0 && shown.length === 0) out.push(p.dim(`Nothing at item ${offset + 1}: there are only ${r.findings.length}.`));
-  else if (hidden > 0) out.push(p.dim(`… ${hidden} ${offset > 0 ? 'more' : 'smaller'} items hidden. ${opts.moreHint ?? 'Use --all to see everything.'}`));
+  else if (hidden > 0) out.push(p.hint(`… ${hidden} ${offset > 0 ? 'more' : 'smaller'} items hidden. ${opts.moreHint ?? 'Use --all to see everything.'}`));
 
   if (r.skipped.length) {
     out.push('');
     for (const s of r.skipped) out.push(p.dim(`Skipped ${s.detector}: ${s.reason}`));
   }
   out.push('');
+  if (opts.footerHint && hidden > 0) {
+    out.push(
+      `${p.hintBold(`Showing ${shown.length} of ${r.findings.length} items.`)} ${p.hintBold(`${bin} show`)}${p.hint(' scrolls through all of them (arrows or mouse wheel); ')}${p.hintBold(`${bin} --all`)}${p.hint(' prints them here.')}`,
+    );
+  }
   const safe = safeActions(r.findings);
   if (safe.length) {
     out.push(`${p.bold('Clean every SAFE item in one go:')} ${safe.length} action${safe.length === 1 ? '' : 's'}. Preview with ${p.cyan(`${bin} fix safe`)}, then add --yes.`);
   }
   out.push(p.dim('Nothing was changed. REVIEW items are never batched: copy the "run:" line under the ones you want.'));
+  if (r.durationMs !== undefined) out.push(`Scan took ${fmtDuration(r.durationMs)}.`);
   return out.join('\n');
 }
 

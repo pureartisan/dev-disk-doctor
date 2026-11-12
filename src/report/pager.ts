@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 
-const PROMPT = 'scroll: arrows or mouse wheel, space = next page, / = search, q = quit  (%pb\\%)';
+// No ":" or "?" in here: less reads them as prompt syntax and cuts the prompt off at that character.
+export const PROMPT = 'scroll with arrows or mouse wheel, space = next page, / = search, q = quit  (%pb\\%)';
 
 /** Terminal rows the text takes up once long lines wrap. */
 export function screenLines(text: string, columns: number): number {

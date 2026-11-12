@@ -102,4 +102,6 @@ export interface ScanResult {
   findings: Finding[];
   skipped: { detector: string; reason: string }[];
   timingsMs: Record<string, number>;
+  /** Wall-clock time the whole scan took. Absent in scans saved before it was recorded. */
+  durationMs?: number;
 }

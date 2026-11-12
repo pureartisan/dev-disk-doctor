@@ -4,7 +4,8 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { clearScan, describeAge, loadScan, saveScan, scanCachePath } from '../src/core/cache.js';
 import type { Finding, ScanResult } from '../src/core/types.js';
-import { page, screenLines } from '../src/report/pager.js';
+import { PROMPT, page, screenLines } from '../src/report/pager.js';
+import { fmtDuration } from '../src/core/util.js';
 import { renderScan } from '../src/report/text.js';
 import { tmp } from './helpers.js';
 
@@ -75,6 +76,27 @@ describe('paging a scan', () => {
     assert.match(renderScan(result(30), style, { moreHint: 'Run show.' }), /5 smaller items hidden\. Run show\./);
   });
 
+  it('names show and --all in the footer when items are hidden, and not when everything fits', () => {
+    const out = renderScan(result(30), style, { footerHint: true, bin: 'dev-disk-doctor' });
+    assert.match(out, /Showing 25 of 30 items\. dev-disk-doctor show scrolls through all of them .*dev-disk-doctor --all prints them here\./);
+    assert.doesNotMatch(renderScan(result(5), style, { footerHint: true }), /Showing \d+ of/);
+    assert.doesNotMatch(renderScan(result(30), style), /Showing \d+ of/);
+  });
+
+  it('paints the hints light blue when colour is on', () => {
+    const out = renderScan(result(30), { color: true }, { footerHint: true });
+    // eslint-disable-next-line no-control-regex
+    const lightBlue = /\x1b\[(1;)?96m/;
+    assert.match(out.split('\n').find((l) => l.includes('items hidden')) ?? '', lightBlue);
+    assert.match(out.split('\n').find((l) => l.includes('Showing 25 of 30')) ?? '', lightBlue);
+  });
+
+  it('ends with how long the scan took, when it was recorded', () => {
+    const out = renderScan({ ...result(3), durationMs: 42_400 }, style).split('\n');
+    assert.equal(out.at(-1), 'Scan took 42s.');
+    assert.doesNotMatch(renderScan(result(3), style), /Scan took/);
+  });
+
   it('says so when the offset is past the end', () => {
     assert.match(renderScan(result(4), style, { offset: 9 }), /Nothing at item 10: there are only 4\./);
   });
@@ -93,5 +115,24 @@ describe('paging a scan', () => {
     } finally {
       process.env.PATH = saved;
     }
+  });
+});
+
+describe('pager prompt', () => {
+  it('has none of the characters less reads as prompt syntax, which would cut the help text short', () => {
+    // less ends a prompt at ":" or "?" outside a conditional, so "scroll: arrows ..." showed only "scroll".
+    assert.doesNotMatch(PROMPT.replace('%pb\\%', ''), /[:?.]/);
+    assert.match(PROMPT, /arrows or mouse wheel/);
+    assert.match(PROMPT, /q = quit/);
+  });
+});
+
+describe('fmtDuration', () => {
+  it('reads as seconds, then minutes', () => {
+    assert.equal(fmtDuration(800), '0.8s');
+    assert.equal(fmtDuration(9_940), '9.9s');
+    assert.equal(fmtDuration(42_400), '42s');
+    assert.equal(fmtDuration(72_000), '1m 12s');
+    assert.equal(fmtDuration(Number.NaN), '0s');
   });
 });
