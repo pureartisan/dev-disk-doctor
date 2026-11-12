@@ -72,5 +72,6 @@ export function shellQuote(s: string): string {
 }
 
 export function daysAgo(ms: number, now = Date.now()): number {
-  return Math.floor((now - ms) / 86_400_000);
+  // A just-written file can have an mtime slightly ahead of Date.now(); never report negative idle time.
+  return Math.max(0, Math.floor((now - ms) / 86_400_000));
 }
