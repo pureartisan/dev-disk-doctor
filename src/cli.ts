@@ -2,7 +2,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { clearScan, describeAge, loadScan, saveScan } from './core/cache.js';
+import { FIX_REUSE_MS, clearScan, describeAge, loadMatchingScan, saveScan } from './core/cache.js';
 import { addCustomCache, addSavedRoot, configPath, listCustomCaches, removeCustomCache, removeSavedRoot, resetConfig, saveAutoDiscover } from './core/config.js';
 import { applyAction, applyPlan, applySafe, runnableActions } from './core/fix.js';
 import { buildOptions, scan } from './core/scan.js';
@@ -56,14 +56,15 @@ Options
   --all                  Show every finding instead of the top 25
   --from <n>             With "show": start at item n (1 is the biggest)
   --count <n>            With "show": list n items
-  --force                With "show": throw away the saved scan and scan again
+  --force                With "show": throw away the saved scan and scan again. With "fix" (no id, or safe):
+                         scan again instead of reusing a scan from the last five minutes
   --no-pager             With "show": print instead of opening a scrollable view (also the case when piped)
   --no-mouse             With "show": keyboard scrolling only, so the terminal keeps handling text selection
   --yes                  With "fix": actually run the action
   --no-color             Plain output
   -v, --version          Print the version
 
-Each text scan is saved to ~/.dev-disk-doctor/last-scan.json for "show"; it is only displayed, "fix" always re-scans.
+Each text scan is saved to ~/.dev-disk-doctor/last-scan.json. "show" lists it again; "fix" (checklist or safe) reuses it for five minutes when it was made with the same options, and checks the chosen items again before running them if it is over a minute old.
 Nothing is deleted unless you run "fix <id> --yes" or "fix safe --yes". REVIEW items are only run
 one at a time, by id. Actions marked CAREFUL are never run by the tool.`;
 
@@ -188,6 +189,29 @@ async function scanWithSpinner(p: Parsed, opts: ScanOptions): Promise<ScanResult
   }
 }
 
+/**
+ * For "fix": the saved scan when it is under five minutes old and was made with these same options, so a scan you
+ * just looked at is not repeated; otherwise a new scan, saved for the next run. "--force" always scans again.
+ */
+async function recentScanOrScan(p: Parsed, opts: ScanOptions): Promise<ScanResult> {
+  if (!p.force) {
+    const saved = await loadMatchingScan(opts, FIX_REUSE_MS);
+    if (saved) {
+      if (!p.json) console.log(`Using the scan taken ${describeAge(saved.generatedAt)} (add --force to scan again).`);
+      return saved;
+    }
+  }
+  const result = await scanWithSpinner(p, opts);
+  if (!p.json) await saveScan(opts.home, result);
+  return result;
+}
+
+/** One line per item that `fix` left out because it changed since the scan. */
+function reportDropped(dropped: { finding: { title: string } }[]): void {
+  console.log(`Left out ${dropped.length} item${dropped.length === 1 ? '' : 's'} that changed since the scan:`);
+  for (const d of dropped) console.log(`  - ${d.finding.title}`);
+}
+
 async function main(): Promise<void> {
   const p = parse(process.argv.slice(2));
   switch (p.command) {
@@ -257,13 +281,14 @@ async function main(): Promise<void> {
       return;
     }
     case 'show': {
-      const home = os.homedir();
-      if (p.force) await clearScan(home);
-      let result = await loadScan(home);
+      if (p.force) await clearScan(os.homedir());
+      // A saved scan of any age is shown, but only if it answers the same question: same folders, thresholds and detectors.
+      let opts = await options(p);
+      let result = await loadMatchingScan(opts);
       const saved = Boolean(result);
       if (!result) {
         await askRootsIfNeeded(p);
-        const opts = await options(p);
+        opts = await options(p);
         result = await scanWithSpinner(p, opts);
         await saveScan(opts.home, result);
       }
@@ -303,7 +328,7 @@ async function main(): Promise<void> {
         await askRootsIfNeeded(p);
         const pickOpts = await options(p);
         const style = { color: p.color };
-        const found = await scanWithSpinner(p, pickOpts);
+        const found = await recentScanOrScan(p, pickOpts);
         const rows = buildRows(runnableActions(found.findings));
         if (!rows.length) {
           console.log('Nothing this tool can clean right now.');
@@ -317,7 +342,8 @@ async function main(): Promise<void> {
         const done = await applyPlan(pickOpts, selectedPlan(rows, chosen), true, {
           onPlan: (items, warnings) => console.log(renderBatchPlan(items.length, warnings, false, style, 'selected item')),
           onItem: (item, i, total) => console.log(renderBatchItem(item, i, total, style)),
-        });
+          onDropped: reportDropped,
+        }, found.generatedAt);
         await clearScan(pickOpts.home);
         console.log(renderBatchSummary(done, style));
         if (!done.ok) process.exitCode = 1;
@@ -327,19 +353,19 @@ async function main(): Promise<void> {
       if (id === 'safe') {
         const text = !p.json;
         const style = { color: p.color };
-        const spinner = text ? startSpinner(SCANNING) : undefined;
-        let batch;
-        try {
-          batch = await applySafe(opts, p.yes, {
+        const found = await recentScanOrScan(p, opts);
+        const batch = await applySafe(
+          opts,
+          p.yes,
+          {
+            onDropped: (dropped) => text && reportDropped(dropped),
             onPlan: (plan, warnings) => {
-              spinner?.stop();
               if (text && plan.length) console.log(renderBatchPlan(plan.length, warnings, !p.yes, style));
             },
             onItem: (item, i, total) => text && console.log(renderBatchItem(item, i, total, style)),
-          });
-        } finally {
-          spinner?.stop();
-        }
+          },
+          found,
+        );
         if (p.yes) await clearScan(opts.home);
         console.log(p.json ? JSON.stringify(batch, null, 2) : renderBatchSummary(batch, style));
         if (!batch.ok) process.exitCode = 1;

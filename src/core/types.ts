@@ -104,4 +104,6 @@ export interface ScanResult {
   timingsMs: Record<string, number>;
   /** Wall-clock time the whole scan took. Absent in scans saved before it was recorded. */
   durationMs?: number;
+  /** Checksum of the normalised options this scan ran with. Absent in scans saved by earlier versions. */
+  fingerprint?: string;
 }

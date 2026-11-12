@@ -1,10 +1,15 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { ScanResult } from './types.js';
+import { fingerprintOptions } from './fingerprint.js';
+import type { ScanOptions, ScanResult } from './types.js';
+
+/** How old a saved scan may be before `fix` stops reusing it and scans again. */
+export const FIX_REUSE_MS = 5 * 60_000;
 
 /**
  * The last text scan lives in `~/.dev-disk-doctor/last-scan.json`, so `show` can page through it without scanning
- * again. It is only ever displayed: `fix` always re-scans before it runs anything.
+ * again, and `fix` can reuse it while it is recent (see `loadMatchingScan`). Whatever uses it, `fix` re-checks the
+ * items it is about to run when the scan is more than a minute old.
  */
 export function scanCachePath(home: string): string {
   return path.join(home, '.dev-disk-doctor', 'last-scan.json');
@@ -27,6 +32,23 @@ export async function loadScan(home: string): Promise<ScanResult | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Whether `result` answers the same question as a run with `opts` would: made with the same normalised options
+ * and, when `maxAgeMs` is given, no older than that. A scan from the future (clock change) or from before
+ * fingerprints were saved never matches.
+ */
+export function scanMatches(result: ScanResult, opts: ScanOptions, maxAgeMs = Infinity, now = Date.now()): boolean {
+  if (!result.fingerprint || result.fingerprint !== fingerprintOptions(opts)) return false;
+  const age = now - Date.parse(result.generatedAt);
+  return Number.isFinite(age) && age >= 0 && age <= maxAgeMs;
+}
+
+/** The saved scan if it matches `opts` (and is recent enough, when `maxAgeMs` is given), else undefined. */
+export async function loadMatchingScan(opts: ScanOptions, maxAgeMs = Infinity, now = Date.now()): Promise<ScanResult | undefined> {
+  const saved = await loadScan(opts.home);
+  return saved && scanMatches(saved, opts, maxAgeMs, now) ? saved : undefined;
 }
 
 /** Forget the saved scan, e.g. once a fix has changed what is on disk. */

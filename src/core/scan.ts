@@ -1,6 +1,7 @@
 import os from 'node:os';
 import { detectors } from '../detectors/index.js';
 import { run } from './exec.js';
+import { fingerprintOptions } from './fingerprint.js';
 import { defaultRoots } from './roots.js';
 import { isInside } from './util.js';
 import type { DiskInfo, Finding, Risk, ScanOptions, ScanResult } from './types.js';
@@ -106,5 +107,6 @@ export async function scan(opts: ScanOptions): Promise<ScanResult> {
     skipped,
     timingsMs: timings,
     durationMs: Date.now() - startedAt,
+    fingerprint: fingerprintOptions(opts),
   };
 }

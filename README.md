@@ -93,7 +93,7 @@ Options (they go after the command):
 | `--deep` | Also sweep your whole home folder for unknown space hogs. Slow. |
 | `--all` | Show every finding instead of the top 25. |
 | `--from <n>`, `--count <n>` | With `show`: start at item `n` and list `n` items, to page through a long list. |
-| `--force` | With `show`: throw away the saved scan and scan again. |
+| `--force` | With `show`: throw away the saved scan and scan again. With `fix` (checklist or `safe`): scan again instead of reusing a scan from the last five minutes. |
 | `--no-pager` | With `show`: print instead of opening the scrollable view. Piped output is never paged. |
 | `--no-mouse` | With `show`: keyboard scrolling only. The mouse wheel works by default, which means selecting text needs Option (or Shift) held; this turns that off. |
 | `--yes` | With `fix`: actually run the action. Without it, `fix` is a dry run. |
@@ -111,7 +111,13 @@ dev-disk-doctor --json > scan.json              # for scripts and agents
 dev-disk-doctor show --from 26 --count 25 --no-pager  # the second page of the last scan
 ```
 
-Every text scan is saved to `~/.dev-disk-doctor/last-scan.json` so `show` can list it again instantly. It is only ever displayed: `fix` always re-scans before it changes anything, and a successful `fix --yes` deletes the saved scan because its sizes are out of date by then. Sizes in a saved scan do not update on their own; `show --force` scans again.
+Every text scan is saved to `~/.dev-disk-doctor/last-scan.json`, together with a checksum of the options it ran with (folders, `--min-size`, `--stale-days`, `--deep`, `--only`, written in one canonical form, so the order or spelling of the same folders does not matter).
+
+- `show` lists the saved scan again instantly, whatever its age, as long as the options match. If you pass different options, it scans again.
+- `fix` with no id (the checklist) and `fix safe` reuse the saved scan when it is under five minutes old and the options match, and say so. Anything older, or made with other options, is scanned again. `--force` always scans again.
+- Before `fix` runs anything from a scan that is over a minute old, it looks again at just the detectors behind the items you chose. An item that has gone, or become riskier since (a worktree that picked up uncommitted changes, say), is left out and listed.
+- `fix <id> --yes` always looks again at the one detector behind that id.
+- A successful `fix --yes` deletes the saved scan, because its sizes are out of date by then. Sizes in a saved scan do not update on their own; `show --force` scans again.
 
 Nothing is deleted unless you run `fix <id> --yes`, `fix safe --yes`, or confirm the `fix` checklist. Actions marked CAREFUL are never run by the tool.
 
