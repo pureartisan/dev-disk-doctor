@@ -67,6 +67,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 export async function scan(opts: ScanOptions): Promise<ScanResult> {
+  const startedAt = Date.now();
   const findings: Finding[] = [];
   const skipped: ScanResult['skipped'] = [];
   const timings: Record<string, number> = {};
@@ -104,5 +105,6 @@ export async function scan(opts: ScanOptions): Promise<ScanResult> {
     findings,
     skipped,
     timingsMs: timings,
+    durationMs: Date.now() - startedAt,
   };
 }

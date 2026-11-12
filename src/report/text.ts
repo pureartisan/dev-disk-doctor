@@ -1,5 +1,5 @@
 import { safeActions, type BatchItem, type BatchOutcome } from '../core/fix.js';
-import { fmtBytes, shellQuote } from '../core/util.js';
+import { fmtBytes, fmtDuration, shellQuote } from '../core/util.js';
 import type { Action, Finding, Risk, ScanResult } from '../core/types.js';
 import type { WorktreeAudit, WorktreeInfo } from '../worktrees/types.js';
 
@@ -32,7 +32,11 @@ function isRunnable(f: Finding, a: Action): boolean {
   return a.kind.type !== 'manual' && a.risk !== 'danger' && f.risk !== 'danger';
 }
 
-export function renderScan(r: ScanResult, style: Style, opts: { limit?: number; offset?: number; moreHint?: string; bin?: string } = {}): string {
+export function renderScan(
+  r: ScanResult,
+  style: Style,
+  opts: { limit?: number; offset?: number; moreHint?: string; bin?: string; /** Name `show` and `--all` in the footer when items are hidden. */ footerHint?: boolean } = {},
+): string {
   const bin = opts.bin ?? binName();
   const p = paint(style);
   const riskTag = (risk: Risk) => (risk === 'safe' ? p.green : risk === 'review' ? p.yellow : p.red)(`[${RISK_LABEL[risk]}]`);
@@ -64,11 +68,17 @@ export function renderScan(r: ScanResult, style: Style, opts: { limit?: number; 
     for (const s of r.skipped) out.push(p.dim(`Skipped ${s.detector}: ${s.reason}`));
   }
   out.push('');
+  if (opts.footerHint && hidden > 0) {
+    out.push(
+      `${p.bold(`Showing ${shown.length} of ${r.findings.length} items.`)} ${p.cyan(`${bin} show`)} scrolls through all of them (arrows or mouse wheel); ${p.cyan(`${bin} --all`)} prints them here.`,
+    );
+  }
   const safe = safeActions(r.findings);
   if (safe.length) {
     out.push(`${p.bold('Clean every SAFE item in one go:')} ${safe.length} action${safe.length === 1 ? '' : 's'}. Preview with ${p.cyan(`${bin} fix safe`)}, then add --yes.`);
   }
   out.push(p.dim('Nothing was changed. REVIEW items are never batched: copy the "run:" line under the ones you want.'));
+  if (r.durationMs !== undefined) out.push(`Scan took ${fmtDuration(r.durationMs)}.`);
   return out.join('\n');
 }
 

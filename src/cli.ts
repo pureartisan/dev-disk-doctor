@@ -251,8 +251,7 @@ async function main(): Promise<void> {
       const opts = await options(p);
       const result = await scanWithSpinner(p, opts);
       if (!p.json) await saveScan(opts.home, result);
-      const moreHint = `Use --all to list them here, or run "${binName()} show" to scroll through all of them (arrow keys or mouse wheel).`;
-      console.log(p.json ? JSON.stringify(result, null, 2) : renderScan(result, { color: p.color }, { limit: p.all ? Infinity : 25, moreHint }));
+      console.log(p.json ? JSON.stringify(result, null, 2) : renderScan(result, { color: p.color }, { limit: p.all ? Infinity : 25, footerHint: true }));
       return;
     }
     case 'show': {
