@@ -10,6 +10,8 @@
 
 Works as a CLI and as an **MCP server**, so an AI agent (Claude Code, Cursor, Codex…) can run it, show you the options, and ask before touching anything.
 
+> **Built mainly for macOS.** Xcode, the iOS Simulator, Docker Desktop's disk image and `~/Library` caches are macOS checks. Linux works for the cross-platform ones (Docker, package caches, models, projects, worktrees), and Windows is not supported. See [Platform support](#platform-support).
+
 ```bash
 npm install -g dev-disk-doctor
 dev-disk-doctor              # scan, read-only
@@ -225,7 +227,7 @@ macOS Storage settings has a category called **Documents** that is not your `~/D
 
 ## Platform support
 
-macOS is the primary target and is tested. Linux works for the cross-platform checks (Docker, package caches, models, projects, worktrees). Windows is not supported yet.
+dev-disk-doctor is built mainly for **macOS**, which is the primary target and gets the most checks (Xcode, the iOS Simulator, Docker Desktop's disk image, `~/Library` caches). Linux works for the cross-platform checks (Docker, package caches, models, projects, worktrees), but expect fewer findings. Windows is not supported yet. Both macOS and Linux run in CI.
 
 ## Development
 
