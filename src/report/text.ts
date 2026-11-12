@@ -110,11 +110,18 @@ export function renderBatchItem(item: BatchItem, index: number, total: number, s
   return batchLine(item, index, total, paint(style));
 }
 
+/** "Free space changed by 1.23 GB.", in bold green when space was actually freed. */
+export function renderFreedSpace(bytes: number, style: Style): string {
+  const p = paint(style);
+  const line = `Free space changed by ${(bytes / 1024 ** 3).toFixed(2)} GB.`;
+  return bytes > 0 ? p.bold(p.green(line)) : line;
+}
+
 export function renderBatchSummary(b: BatchOutcome, style: Style, bin = binName()): string {
   const p = paint(style);
   if (!b.items.length) return 'Nothing safe to clean right now.';
   if (b.dryRun) return `\n${p.dim('Nothing was changed.')} Run ${p.cyan(`${bin} fix safe --yes`)} to do all of the above.`;
-  const freed = b.freedBytes !== undefined ? ` Free space changed by ${(b.freedBytes / 1024 ** 3).toFixed(2)} GB.` : '';
+  const freed = b.freedBytes !== undefined ? ` ${renderFreedSpace(b.freedBytes, style)}` : '';
   const failed = b.failed ? p.red(` ${b.failed} failed; see ✗ above.`) : '';
   return `\nDone: ${b.items.length - b.failed} of ${b.items.length} cleaned.${failed}${freed}`;
 }

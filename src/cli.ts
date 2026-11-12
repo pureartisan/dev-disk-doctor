@@ -9,7 +9,7 @@ import { version } from './core/version.js';
 import type { ScanOptions } from './core/types.js';
 import { expandHome } from './core/util.js';
 import { askRoots, type Io } from './prompt.js';
-import { binName, renderBatchItem, renderBatchPlan, renderBatchSummary, renderScan, renderWorktrees } from './report/text.js';
+import { binName, renderBatchItem, renderBatchPlan, renderBatchSummary, renderFreedSpace, renderScan, renderWorktrees } from './report/text.js';
 import { auditWorktrees } from './worktrees/audit.js';
 
 const HELP = `dev-disk-doctor: find out why your developer machine's disk is full
@@ -248,7 +248,7 @@ async function main(): Promise<void> {
         if (res.command) console.log(`$ ${res.command}`);
         if (res.warning) console.log(`! ${res.warning}`);
         if (res.output) console.log(res.output);
-        if (res.freedBytes !== undefined && !res.dryRun) console.log(`Free space changed by ${(res.freedBytes / 1024 ** 3).toFixed(2)} GB.`);
+        if (res.freedBytes !== undefined && !res.dryRun) console.log(renderFreedSpace(res.freedBytes, { color: p.color }));
       }
       if (!res.ok) process.exitCode = 1;
       return;
