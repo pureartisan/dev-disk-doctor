@@ -63,6 +63,9 @@ The examples below use the installed `dev-disk-doctor` command. Put `npx` in fro
 | `dev-disk-doctor roots remove <dir>` | Forget a saved workspace folder. |
 | `dev-disk-doctor roots auto` | Always figure the folders out, and stop asking. |
 | `dev-disk-doctor roots reset` | Forget every saved choice and ask again next time. |
+| `dev-disk-doctor caches` | List the cache folders you added yourself. |
+| `dev-disk-doctor caches add <path>` | Add a cache folder the built-in list does not know. Takes `--label` and `--risk`. |
+| `dev-disk-doctor caches remove <path>` | Forget one you added. |
 | `dev-disk-doctor mcp` | Start the MCP server on stdio, for AI agents. |
 | `dev-disk-doctor --help` (or `-h`, `help`) | List every command and option in the terminal. |
 | `dev-disk-doctor --version` | Print the version. |
@@ -75,10 +78,12 @@ Options (they go after the command):
 | `--root <dir>` | Workspace folder to search. Repeatable. Replaces the defaults for this run. |
 | `--min-size <MB>` | Ignore items smaller than this. Default 100. |
 | `--stale-days <n>` | Days idle before a project or worktree counts as stale. Default 30. |
-| `--only <detector>` | Run one detector: `docker`, `android`, `xcode`, `pkgcaches`, `browsers`, `models`, `projects`, `worktrees`, `system` or `biggest`. Repeatable. |
+| `--only <detector>` | Run one detector: `docker`, `android`, `xcode`, `pkgcaches`, `devcaches`, `browsers`, `models`, `projects`, `worktrees`, `system`, `custom`, `discovery` or `biggest`. Repeatable. `discovery` and `biggest` subtract what the others find, so they list known caches as unrecognised unless run together with them. |
 | `--deep` | Also sweep your whole home folder for unknown space hogs. Slow. |
 | `--all` | Show every finding instead of the top 25. |
 | `--yes` | With `fix`: actually run the action. Without it, `fix` is a dry run. |
+| `--label <text>` | With `caches add`: a name to show for the folder. |
+| `--risk <safe\|review>` | With `caches add`: `safe` if the owning tool rebuilds it (then `fix safe` may delete it), `review` (default) if you want to look first. |
 | `--no-color` | Plain output. |
 
 Examples:
@@ -134,15 +139,37 @@ The first one that applies wins, and it turns auto-discovery off so only those f
 
 | Area | Examples |
 |---|---|
-| Containers | Docker Desktop disk image (`Docker.raw`), unused images, build cache, stopped containers, volumes |
-| Mobile | Android emulator system images (never one an AVD uses), AVD data, NDKs, Xcode DerivedData, DeviceSupport, simulators |
-| Package caches | npm, pnpm (old store versions too), Yarn, Bun, pip, uv, conda, Homebrew, Cargo, Gradle, Maven, CocoaPods, Go |
-| Test browsers | Playwright, Puppeteer, Cypress downloads |
-| AI models | Hugging Face, Ollama, LM Studio, PyTorch hub, DiffusionBee |
-| Projects | `node_modules`, `.next`, Rust `target/`, `Pods/`, Python venvs in your workspaces, with how long the project has been idle |
+| Containers and VMs | Docker Desktop disk image (`Docker.raw`), unused images, build cache, stopped containers, volumes. Colima, Lima, Podman, OrbStack and Rancher Desktop data, and Vagrant boxes |
+| Mobile | Android emulator system images (never one an AVD uses), AVD data, NDKs, Android build cache, Xcode DerivedData, DeviceSupport, simulators, Swift Package Manager, Carthage, CocoaPods, Kotlin/Native, Flutter pub cache |
+| JavaScript and frontend | npm, pnpm (old store versions too), Yarn, Bun, Deno, Corepack, node-gyp, Electron and electron-builder downloads, TypeScript type cache, Prisma engines, `node_modules`, `.next` and other build output |
+| Python and data science | pip, uv, Poetry, Pipenv, PDM, conda, pre-commit, pyenv downloads, venvs, NLTK data |
+| JVM, Go, Rust, .NET, PHP, Ruby, Elixir | Gradle, Maven, Ivy, Coursier, SDKMAN downloads, Go modules and build cache, Cargo, sccache, ccache, Bazel, NuGet, Composer, Bundler, RVM, Hex |
+| AI and machine learning | Hugging Face, Ollama, LM Studio, PyTorch hub, Keras, Whisper, llama.cpp, GPT4All, KaggleHub, Chroma, Triton, Weights & Biases, DiffusionBee |
+| Infrastructure | Terraform plugin cache, Pulumi plugins, Helm, kubectl cache, mise and asdf downloads |
+| Editors and browsers | VS Code and Cursor caches and logs, JetBrains, Chrome, Firefox, Edge, Brave, Arc, plus the Playwright, Puppeteer, Cypress and Selenium downloads |
 | **Git worktrees** | Every linked worktree in every repo under your workspaces, including those made by Claude Code, Codex, Cursor and Conductor: active, stale, dangling, locked, at-risk, or orphaned |
 | System | Trash, big Downloads, logs, iOS backups, Time Machine local snapshots |
-| Everything else | `--deep` sweeps your home folder for hogs nobody else recognises |
+| Anything else | Unrecognised folders in `~/.cache`, `~/.local/share` and `~/Library/Caches` on every scan, and a `--deep` sweep of your whole home folder. See below |
+
+Every entry names the folder, why it is safe or not, and what deleting it costs (usually a re-download). Locations differ between macOS and Linux, so each tool is checked in every place it uses.
+
+## Caches the tool doesn't know about
+
+Every developer has different tools, so a fixed list can never be complete. Three things fill the gaps:
+
+1. **Discovery, on every scan.** It looks at each folder directly inside `~/.cache`, `~/.local/share` and `~/Library/Caches` (skipping `com.apple.*`, which macOS manages) and lists the big ones no check explains. They are marked `REVIEW` and the only action is "see what is inside": the tool cannot vouch for what it does not recognise, so it never offers to delete them.
+2. **`--deep`**, which sweeps your whole home folder and breaks `~/.cache`, `~/.config`, `~/.local` and `~/Library` down one level so you can see which tool is responsible.
+3. **Your own list.** Once you know a folder is a cache, tell the tool, and it shows up in scans with a delete action:
+
+   ```bash
+   dev-disk-doctor caches add ~/.cache/my-tool --label "My tool" --risk safe
+   dev-disk-doctor caches                  # what you added
+   dev-disk-doctor caches remove ~/.cache/my-tool
+   ```
+
+   `--risk safe` means the owning tool rebuilds it, so `fix safe` may delete it. The default, `review`, keeps it out of batches. Entries are stored in `~/.dev-disk-doctor/config` (`"caches": [{ "path": "~/.cache/my-tool", "label": "My tool", "risk": "safe" }]`) and go through the same guard as every delete: only inside your home folder, never the home folder itself or `Documents`, `Library` and the other top-level folders, never a workspace folder.
+
+Missing a common tool? A new entry in `src/detectors/devcaches.ts` is a few lines: a name, the folders, and a one-line reason.
 
 ## Safe by design
 
@@ -150,6 +177,8 @@ The first one that applies wins, and it turns auto-discovery off so only those f
 - Every finding has a risk level: `SAFE` (regenerates on its own), `REVIEW` (probably fine, check first) or `CAREFUL` (could lose data, never run by the tool).
 - `fix <action-id>` is a **dry run** unless you add `--yes`. Actions come from a fixed allowlist built by the scanners; the tool never executes free-form commands.
 - Worktrees are offered for removal only when they are clean, unlocked, and merged or fully pushed. Dirty worktrees, unpushed commits and Docker volumes are reported with a warning and no apply path.
+- Unrecognised folders found by discovery or `--deep` have no delete action. Only caches on the built-in list, or ones you added yourself, can be deleted.
+- VM and container data (Colima, Lima, Podman, OrbStack, Rancher Desktop, Docker's disk image) is reported as `CAREFUL` with advice, never deleted by the tool.
 - It will not delete anything outside your home folder, your home folder itself, or `Documents`, `Desktop`, `Library` and other top-level folders.
 
 ## Use it with an AI agent (MCP)
