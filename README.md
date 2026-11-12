@@ -140,7 +140,7 @@ The scanner core is in `src/core`, one file per area in `src/detectors`, the wor
 
 ## Releasing (maintainers)
 
-Pushing a `v*` tag publishes to npm through GitHub Actions. Setup, the release steps, how to verify a release and troubleshooting are in [docs/RELEASING.md](docs/RELEASING.md).
+Pushing a `v*` tag stages the release on npm through GitHub Actions, and a maintainer approves it with 2FA. Setup, the release steps, how to verify a release and troubleshooting are in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## License
 
