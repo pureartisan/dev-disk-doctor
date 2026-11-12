@@ -1,5 +1,6 @@
+import { safeActions, type BatchItem, type BatchOutcome } from '../core/fix.js';
 import { fmtBytes } from '../core/util.js';
-import type { Finding, Risk, ScanResult } from '../core/types.js';
+import type { Action, Finding, Risk, ScanResult } from '../core/types.js';
 import type { WorktreeAudit, WorktreeInfo } from '../worktrees/types.js';
 
 export interface Style {
@@ -13,7 +14,18 @@ function paint(style: Style) {
 
 const RISK_LABEL: Record<Risk, string> = { safe: 'SAFE', review: 'REVIEW', danger: 'CAREFUL' };
 
-export function renderScan(r: ScanResult, style: Style, opts: { limit?: number } = {}): string {
+/** What to type to run this tool again: `npx dev-disk-doctor` when launched through npx, else the bare name. */
+export function binName(argv1 = process.argv[1] ?? ''): string {
+  return argv1.includes('/_npx/') ? 'npx dev-disk-doctor' : 'dev-disk-doctor';
+}
+
+/** Actions `fix <id>` can run: anything that is not instructions-only on a finding that is not marked danger. */
+function isRunnable(f: Finding, a: Action): boolean {
+  return a.kind.type !== 'manual' && a.risk !== 'danger' && f.risk !== 'danger';
+}
+
+export function renderScan(r: ScanResult, style: Style, opts: { limit?: number; bin?: string } = {}): string {
+  const bin = opts.bin ?? binName();
   const p = paint(style);
   const riskTag = (risk: Risk) => (risk === 'safe' ? p.green : risk === 'review' ? p.yellow : p.red)(`[${RISK_LABEL[risk]}]`);
   const out: string[] = [];
@@ -33,7 +45,7 @@ export function renderScan(r: ScanResult, style: Style, opts: { limit?: number }
 
   const limit = opts.limit ?? 25;
   const shown = r.findings.slice(0, limit);
-  shown.forEach((f, i) => out.push(renderFinding(f, i + 1, p, riskTag)));
+  shown.forEach((f, i) => out.push(renderFinding(f, i + 1, p, riskTag, bin)));
   if (r.findings.length > shown.length) out.push(p.dim(`… ${r.findings.length - shown.length} smaller items hidden. Use --all to see everything.`));
 
   if (r.skipped.length) {
@@ -41,11 +53,15 @@ export function renderScan(r: ScanResult, style: Style, opts: { limit?: number }
     for (const s of r.skipped) out.push(p.dim(`Skipped ${s.detector}: ${s.reason}`));
   }
   out.push('');
-  out.push(p.dim('Nothing was changed. To act on an item: dev-disk-doctor fix "<action id>" (dry run), then add --yes.'));
+  const safe = safeActions(r.findings);
+  if (safe.length) {
+    out.push(`${p.bold('Clean every SAFE item in one go:')} ${safe.length} action${safe.length === 1 ? '' : 's'}. Preview with ${p.cyan(`${bin} fix safe`)}, then add --yes.`);
+  }
+  out.push(p.dim('Nothing was changed. REVIEW items are never batched: copy the "run:" line under the ones you want.'));
   return out.join('\n');
 }
 
-function renderFinding(f: Finding, n: number, p: ReturnType<typeof paint>, tag: (r: Risk) => string): string {
+function renderFinding(f: Finding, n: number, p: ReturnType<typeof paint>, tag: (r: Risk) => string, bin: string): string {
   const lines: string[] = [];
   lines.push(`${String(n).padStart(2)}. ${p.bold(fmtBytes(f.bytes).padStart(8))}  ${tag(f.risk)} ${f.title}`);
   lines.push(`    ${p.dim(f.why)}`);
@@ -55,10 +71,44 @@ function renderFinding(f: Finding, n: number, p: ReturnType<typeof paint>, tag: 
     lines.push(`    ${p.cyan('→')} ${a.label} ${p.dim(`(${mark})`)}`);
     lines.push(`      ${p.dim('$')} ${a.display}`);
     if (a.warning) lines.push(`      ${p.yellow('! ' + a.warning)}`);
-    lines.push(`      ${p.dim('id: ' + a.id)}`);
+    if (isRunnable(f, a)) lines.push(`      ${p.dim('run:')} ${p.cyan(`${bin} fix "${a.id}" --yes`)}`);
   }
   lines.push('');
   return lines.join('\n');
+}
+
+function batchLine(item: BatchItem, index: number, total: number, p: ReturnType<typeof paint>): string {
+  const o = item.outcome;
+  const head = `${String(index + 1).padStart(String(total).length)}/${total}  ${fmtBytes(item.bytes).padStart(8)}  ${item.title}`;
+  if (o.dryRun) return `${p.bold(head)}\n      ${p.dim('$')} ${o.command ?? ''}`;
+  if (!o.ok) return `${p.red('✗')} ${p.bold(head)}\n      ${p.red(o.message)}${o.output ? `\n${o.output}` : ''}`;
+  const freed = o.freedBytes ? p.dim(` (free space +${fmtBytes(o.freedBytes)})`) : '';
+  return `${p.green('✓')} ${p.bold(head)}${freed}`;
+}
+
+/** Shown before a batch starts: how many actions and what to check first. */
+export function renderBatchPlan(count: number, warnings: string[], dryRun: boolean, style: Style): string {
+  const p = paint(style);
+  const out = [p.bold(`${dryRun ? 'Dry run: would clean' : 'Cleaning'} ${count} SAFE item${count === 1 ? '' : 's'}`)];
+  if (warnings.length) {
+    out.push(p.yellow('Check before you run this:'));
+    for (const w of warnings) out.push(p.yellow(`  ! ${w}`));
+  }
+  out.push('');
+  return out.join('\n');
+}
+
+export function renderBatchItem(item: BatchItem, index: number, total: number, style: Style): string {
+  return batchLine(item, index, total, paint(style));
+}
+
+export function renderBatchSummary(b: BatchOutcome, style: Style, bin = binName()): string {
+  const p = paint(style);
+  if (!b.items.length) return 'Nothing safe to clean right now.';
+  if (b.dryRun) return `\n${p.dim('Nothing was changed.')} Run ${p.cyan(`${bin} fix safe --yes`)} to do all of the above.`;
+  const freed = b.freedBytes !== undefined ? ` Free space changed by ${(b.freedBytes / 1024 ** 3).toFixed(2)} GB.` : '';
+  const failed = b.failed ? p.red(` ${b.failed} failed; see ✗ above.`) : '';
+  return `\nDone: ${b.items.length - b.failed} of ${b.items.length} cleaned.${failed}${freed}`;
 }
 
 const STATUS_ORDER: Record<string, number> = { 'at-risk': 0, stale: 1, prunable: 2, locked: 3, active: 4 };

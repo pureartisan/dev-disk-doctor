@@ -26,8 +26,14 @@ You need [Node.js](https://nodejs.org) 18 or newer. Nothing else to install.
    ```bash
    npx dev-disk-doctor fix "docker:build-cache#prune"
    ```
-   Add `--yes` to actually run it.
-4. **Or let an AI agent drive it**; see [Use it with an AI agent](#use-it-with-an-ai-agent-mcp) below.
+   Add `--yes` to actually run it. Every item that can be run shows a ready-to-paste `run:` line, so you can copy it straight from the scan.
+4. **Or clean every SAFE item in one go.** Preview first, then add `--yes`:
+   ```bash
+   npx dev-disk-doctor fix safe
+   npx dev-disk-doctor fix safe --yes
+   ```
+   It lists the warnings to read first (such as "quit Chrome"), runs the biggest items first, and carries on if one fails. `REVIEW` items are never batched: pick those one at a time with their `run:` line.
+5. **Or let an AI agent drive it**; see [Use it with an AI agent](#use-it-with-an-ai-agent-mcp) below.
 
 `npx` runs the tool without installing it, so a plain `dev-disk-doctor` command is not available afterwards. To get that command, install it globally: `npm install -g dev-disk-doctor`, then run `dev-disk-doctor`.
 
@@ -120,6 +126,7 @@ No MCP? Give your agent the playbook in [`skills/dev-disk-doctor/SKILL.md`](skil
 dev-disk-doctor [scan]            Scan for space hogs (read-only)
 dev-disk-doctor worktrees         Audit git worktrees across all your repos
 dev-disk-doctor fix <action-id>   Show what an action does; add --yes to run it
+dev-disk-doctor fix safe          The same for every SAFE item at once
 dev-disk-doctor roots             Show which workspace folders will be searched
 dev-disk-doctor roots add <dir>   Remember a workspace folder for next time
 dev-disk-doctor roots remove <dir>  Forget a saved workspace folder
