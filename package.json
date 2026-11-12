@@ -22,7 +22,8 @@
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "npm test",
     "test": "npm run build && node --test dist/test/*.test.js",
-    "scan": "npm run build && node dist/src/cli.js"
+    "scan": "npm run build && node dist/src/cli.js",
+    "bundle": "npm run build && node scripts/bundle.mjs"
   },
   "repository": {
     "type": "git",

@@ -1,6 +1,6 @@
 # Releasing dev-disk-doctor
 
-How to publish a new version to npm, and how to check it worked. Pushing a version tag (`v*`) runs [`.github/workflows/release.yml`](../.github/workflows/release.yml), which builds, tests and **stages** the package on npm and creates a GitHub release. The version does not go live until a maintainer approves it with 2FA.
+How to publish a new version to npm, and how to check it worked. Pushing a version tag (`v*`) runs [`.github/workflows/release.yml`](../.github/workflows/release.yml), which builds, tests and **stages** the package on npm and creates a GitHub release with an install bundle attached. The version does not go live until a maintainer approves it with 2FA.
 
 There is no npm token to create or rotate. The workflow authenticates to npm through GitHub OIDC as a *trusted publisher*.
 
@@ -98,8 +98,26 @@ It pushes straight to `main`, which only works while `main` has no branch protec
 1. Checks out the tagged commit, updates npm to 11.x and runs `npm ci`.
 2. Fails if the tag does not equal `v` + the `package.json` version.
 3. Runs `npm test` (build plus the test suite).
-4. Runs `npm stage publish --provenance --access public`. This uploads the package to npm's staging area. It is **not** public yet.
-5. Creates a GitHub release with generated notes. This happens when the version is staged, before you approve it on npm.
+4. Builds the install bundle (`npm run bundle`, see below), then runs `npm stage publish --provenance --access public`. This uploads the package to npm's staging area. It is **not** public yet.
+5. Creates a GitHub release with generated notes and the bundle attached. This happens when the version is staged, before you approve it on npm.
+
+## The install bundle
+
+Every GitHub release has two identical assets: `dev-disk-doctor-X.Y.Z.tgz` and `dev-disk-doctor.tgz`. The second name never changes, so `https://github.com/pureartisan/dev-disk-doctor/releases/latest/download/dev-disk-doctor.tgz` always serves the newest bundle.
+
+The bundle is the npm package with its runtime dependencies packed inside (`bundleDependencies`), so `npm install -g ./dev-disk-doctor.tgz` works on a machine with no route to the npm registry, or one that cannot see this package there. [`scripts/bundle.mjs`](../scripts/bundle.mjs) builds it in a temporary folder from `dist/src` and `package-lock.json` (`npm ci --omit=dev`), so the dependency versions are the locked ones and `package.json` is not modified. The package published to npm does not bundle its dependencies.
+
+Build one locally with `npm run bundle`; it lands in `release/` (git-ignored). The `bundle` job in CI builds one on every PR and installs it with an unreachable registry, so a broken bundle is caught before a release.
+
+To add a bundle to a release that was made before this existed, build it from that tag and upload it:
+
+```bash
+git checkout vX.Y.Z && npm ci && npm run bundle
+cp release/dev-disk-doctor-X.Y.Z.tgz release/dev-disk-doctor.tgz
+gh release upload vX.Y.Z release/*.tgz -R pureartisan/dev-disk-doctor
+```
+
+Only the newest release should carry `dev-disk-doctor.tgz`, because `releases/latest` resolves to the release GitHub marks as Latest.
 
 ## Approve the staged version
 
@@ -147,7 +165,7 @@ Expected from the last command: `disk_scan`, `worktree_audit`, `explain_finding`
 Also check by eye:
 
 - The package page at `https://www.npmjs.com/package/dev-disk-doctor` shows the new version and a **Provenance** badge.
-- The GitHub **Releases** page has a release for the tag.
+- The GitHub **Releases** page has a release for the tag, with `dev-disk-doctor-X.Y.Z.tgz` and `dev-disk-doctor.tgz` attached.
 - The README renders correctly on the npm page.
 
 ### Dry run before tagging
