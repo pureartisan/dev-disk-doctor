@@ -35,7 +35,7 @@ jobs:
       - name: Install the bundle with the npm registry unreachable
         run: |
           npm install -g --prefix "$RUNNER_TEMP/prefix" --cache "$RUNNER_TEMP/cache" \
-            --registry http://127.0.0.1:9 --fetch-retries=0 release/dev-disk-doctor-*.tgz
+            --registry http://127.0.0.1:9 --fetch-retries=0 ./release/dev-disk-doctor-*.tgz
           "$RUNNER_TEMP/prefix/bin/dev-disk-doctor" --version
 
   automerge-dependabot:
