@@ -4,7 +4,8 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { applySafe, safeActions } from '../src/core/fix.js';
 import { scan } from '../src/core/scan.js';
-import { binName, renderScan } from '../src/report/text.js';
+import { execFileSync } from 'node:child_process';
+import { binName, quoteId, renderScan } from '../src/report/text.js';
 import { opts, tmp, write } from './helpers.js';
 
 /** A home with one SAFE item (uv cache) and one REVIEW item (node_modules of a project active today). */
@@ -65,6 +66,21 @@ describe('scan report', () => {
     const text = renderScan(await scan(opts(home, { only: ['system'], roots: [] })), { color: false }, { bin: 'dev-disk-doctor' });
     assert.match(text, /iOS backups|backup/i);
     assert.doesNotMatch(text, /^\s+run:/m);
+  });
+
+  it('quotes an id so the shell passes it through unchanged', () => {
+    const ids = [
+      'pkgcaches:uv#remove',
+      'projects:/Users/me/My App/node_modules#remove',
+      'projects:/Users/me/$HOME/node_modules#remove',
+      'projects:/Users/me/a`b`/node_modules#remove',
+      'projects:/Users/me/say "hi"/node_modules#remove',
+      "projects:/Users/me/it's/node_modules#remove",
+      'projects:/Users/me/wow!/node_modules#remove',
+      'projects:/Users/me/back\\slash/node_modules#remove',
+    ];
+    for (const id of ids) assert.equal(execFileSync('sh', ['-c', `printf %s ${quoteId(id)}`], { encoding: 'utf8' }), id, id);
+    assert.equal(quoteId('pkgcaches:uv#remove'), '"pkgcaches:uv#remove"');
   });
 
   it('suggests npx only when launched through npx', () => {

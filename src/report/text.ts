@@ -1,5 +1,5 @@
 import { safeActions, type BatchItem, type BatchOutcome } from '../core/fix.js';
-import { fmtBytes } from '../core/util.js';
+import { fmtBytes, shellQuote } from '../core/util.js';
 import type { Action, Finding, Risk, ScanResult } from '../core/types.js';
 import type { WorktreeAudit, WorktreeInfo } from '../worktrees/types.js';
 
@@ -17,6 +17,14 @@ const RISK_LABEL: Record<Risk, string> = { safe: 'SAFE', review: 'REVIEW', dange
 /** What to type to run this tool again: `npx dev-disk-doctor` when launched through npx, else the bare name. */
 export function binName(argv1 = process.argv[1] ?? ''): string {
   return argv1.includes('/_npx/') ? 'npx dev-disk-doctor' : 'dev-disk-doctor';
+}
+
+/**
+ * An action id as one shell word. Double quotes read well and cover almost every id, but a path with `$`, a
+ * backtick, `\`, `"` or `!` (history expansion) would be changed by the shell, so those get single quotes.
+ */
+export function quoteId(id: string): string {
+  return /["$`\\!]/.test(id) ? shellQuote(id) : `"${id}"`;
 }
 
 /** Actions `fix <id>` can run: anything that is not instructions-only on a finding that is not marked danger. */
@@ -71,7 +79,7 @@ function renderFinding(f: Finding, n: number, p: ReturnType<typeof paint>, tag: 
     lines.push(`    ${p.cyan('→')} ${a.label} ${p.dim(`(${mark})`)}`);
     lines.push(`      ${p.dim('$')} ${a.display}`);
     if (a.warning) lines.push(`      ${p.yellow('! ' + a.warning)}`);
-    if (isRunnable(f, a)) lines.push(`      ${p.dim('run:')} ${p.cyan(`${bin} fix "${a.id}" --yes`)}`);
+    if (isRunnable(f, a)) lines.push(`      ${p.dim('run:')} ${p.cyan(`${bin} fix ${quoteId(a.id)} --yes`)}`);
   }
   lines.push('');
   return lines.join('\n');
