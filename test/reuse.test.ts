@@ -44,7 +44,7 @@ describe('options fingerprint', () => {
       opts('/h', { roots: ['/h/dev', '/h/code'], deep: true }),
       opts('/h', { roots: ['/h/dev', '/h/code'], only: ['docker'] }),
       opts('/other', { roots: ['/h/dev', '/h/code'] }),
-      opts('/h', { roots: ['/h/dev', '/h/code'], platform: 'linux' }),
+      opts('/h', { roots: ['/h/dev', '/h/code'], platform: process.platform === 'linux' ? 'darwin' : 'linux' }),
     ];
     for (const o of different) assert.notEqual(fingerprintOptions(o), fingerprintOptions(base));
   });
