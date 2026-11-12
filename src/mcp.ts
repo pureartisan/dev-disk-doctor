@@ -18,7 +18,7 @@ const text = (summary: string, data: unknown) => ({
 });
 
 const scanShape = {
-  roots: z.array(z.string()).optional().describe('Workspace folders to search for projects and repos. Default: ~/dev, ~/code, ~/src, ~/projects, ~/work… whichever exist.'),
+  roots: z.array(z.string()).optional().describe('Workspace folders to search for projects and repos. Default: folders saved with `dev-disk-doctor roots add`, else ~/dev, ~/code, ~/src, ~/projects, ~/work… whichever exist.'),
   min_size_mb: z.number().optional().describe('Ignore items smaller than this. Default 100.'),
   stale_days: z.number().optional().describe('Days idle before a project or worktree is stale. Default 30.'),
 };

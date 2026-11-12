@@ -49,12 +49,21 @@ npx dev-disk-doctor roots
 Override it when your code lives somewhere else (for example `~/Documents/GitHub` or an external drive):
 
 ```bash
-npx dev-disk-doctor --root ~/Documents/GitHub --root /Volumes/Work/code
-# or, for every run:
-export DEV_DISK_DOCTOR_ROOTS="$HOME/Documents/GitHub:/Volumes/Work/code"
+npx dev-disk-doctor --root ~/Documents/GitHub --root /Volumes/Work/code   # this run only
+npx dev-disk-doctor roots add ~/Documents/GitHub                          # remember it for every run
+npx dev-disk-doctor roots remove ~/Documents/GitHub                       # forget it again
 ```
 
-When you pass `--root` or set `DEV_DISK_DOCTOR_ROOTS`, auto-discovery is turned off and only those folders are searched.
+Saved folders live in `~/.dev-disk-doctor/config`, a small JSON file (`{ "roots": ["/Users/you/Documents/GitHub"] }`) you can also edit by hand. The CLI and the MCP server both read it. Folders that no longer exist are skipped but stay in the file. Your home folder itself and `/` cannot be saved.
+
+You can also set `DEV_DISK_DOCTOR_ROOTS="$HOME/Documents/GitHub:/Volumes/Work/code"` in your shell profile.
+
+The first one that applies wins, and it turns auto-discovery off so only those folders are searched:
+
+1. `--root` (or the `roots` argument of the MCP tools)
+2. `DEV_DISK_DOCTOR_ROOTS`
+3. folders saved with `roots add`
+4. auto-discovery
 
 ## What it checks
 
@@ -108,6 +117,8 @@ dev-disk-doctor [scan]            Scan for space hogs (read-only)
 dev-disk-doctor worktrees         Audit git worktrees across all your repos
 dev-disk-doctor fix <action-id>   Show what an action does; add --yes to run it
 dev-disk-doctor roots             Show which workspace folders will be searched
+dev-disk-doctor roots add <dir>   Remember a workspace folder for next time
+dev-disk-doctor roots remove <dir>  Forget a saved workspace folder
 dev-disk-doctor mcp               Start the MCP server on stdio
 
 --json  --root <dir>  --min-size <MB>  --stale-days <n>  --only <detector>  --deep  --all  --yes

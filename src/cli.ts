@@ -1,5 +1,7 @@
 #!/usr/bin/env node
+import os from 'node:os';
 import path from 'node:path';
+import { addSavedRoot, configPath, removeSavedRoot } from './core/config.js';
 import { applyAction } from './core/fix.js';
 import { buildOptions, scan } from './core/scan.js';
 import { version } from './core/version.js';
@@ -15,14 +17,18 @@ Usage
   dev-disk-doctor worktrees         Audit git worktrees across all your repos (read-only)
   dev-disk-doctor fix <action-id>   Show what an action would do; add --yes to run it
   dev-disk-doctor roots             Show which workspace folders will be searched
-  dev-disk-doctor mcp               Start the MCP server on stdio (for AI agents)
+  dev-disk-doctor roots add <dir>   Remember a workspace folder for next time (~/.dev-disk-doctor/config)
+  dev-disk-doctor roots remove <dir>  Forget a saved workspace folder
+  dev-disk-doctor mcp              Start the MCP server on stdio (for AI agents)
 
 Options
   --json                 Machine-readable output (stable schema)
   --root <dir>           Workspace folder to search for projects and repos (repeatable).
                          Default: ~/dev ~/code ~/src ... plus any other folder directly under
                          your home that contains a git repo (e.g. ~/acme). Also settable with
-                         DEV_DISK_DOCTOR_ROOTS=/path/a:/path/b. Run "roots" to see the result.
+                         DEV_DISK_DOCTOR_ROOTS=/path/a:/path/b, or saved with "roots add <dir>".
+                         Order: --root, then the env var, then saved folders, then auto-discovery.
+                         Run "roots" to see the result.
   --min-size <MB>        Ignore items smaller than this (default 100)
   --stale-days <n>       Days idle before a project or worktree counts as stale (default 30)
   --only <detector>      Run one detector (docker, android, xcode, pkgcaches, browsers,
@@ -105,10 +111,22 @@ async function main(): Promise<void> {
       return;
     }
     case 'roots': {
+      const [sub, ...dirs] = p.positional;
+      if (sub === 'add' || sub === 'remove') {
+        if (!dirs.length) throw new Error(`roots ${sub} needs a folder, e.g. dev-disk-doctor roots ${sub} ~/Documents/GitHub`);
+        const home = os.homedir();
+        let saved: string[] = [];
+        for (const d of dirs) saved = sub === 'add' ? await addSavedRoot(home, d) : await removeSavedRoot(home, d);
+        if (p.json) console.log(JSON.stringify({ saved, config: configPath(home) }, null, 2));
+        else if (saved.length) console.log(`${sub === 'add' ? 'Saved' : 'Removed'}. These folders are searched from now on (${configPath(home)}):\n${saved.join('\n')}`);
+        else console.log('No saved folders left. Folders are auto-discovered again.');
+        return;
+      }
+      if (sub !== undefined) throw new Error(`Unknown roots command "${sub}". Use: roots, roots add <dir>, roots remove <dir>.`);
       const opts = await options(p);
       if (p.json) console.log(JSON.stringify({ roots: opts.roots }, null, 2));
       else if (opts.roots.length) console.log(opts.roots.join('\n'));
-      else console.log('No workspace folders found under your home. Pass --root <dir> or set DEV_DISK_DOCTOR_ROOTS.');
+      else console.log('No workspace folders found under your home. Pass --root <dir>, set DEV_DISK_DOCTOR_ROOTS, or run "roots add <dir>".');
       return;
     }
     case 'scan': {
