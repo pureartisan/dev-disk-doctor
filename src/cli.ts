@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 import os from 'node:os';
 import path from 'node:path';
-import { addSavedRoot, configPath, removeSavedRoot } from './core/config.js';
+import { createInterface } from 'node:readline/promises';
+import { addSavedRoot, configPath, removeSavedRoot, resetConfig, saveAutoDiscover } from './core/config.js';
 import { applyAction } from './core/fix.js';
 import { buildOptions, scan } from './core/scan.js';
 import { version } from './core/version.js';
 import type { ScanOptions } from './core/types.js';
 import { expandHome } from './core/util.js';
+import { askRoots, type Io } from './prompt.js';
 import { renderScan, renderWorktrees } from './report/text.js';
 import { auditWorktrees } from './worktrees/audit.js';
 
@@ -19,6 +21,8 @@ Usage
   dev-disk-doctor roots             Show which workspace folders will be searched
   dev-disk-doctor roots add <dir>   Remember a workspace folder for next time (~/.dev-disk-doctor/config)
   dev-disk-doctor roots remove <dir>  Forget a saved workspace folder
+  dev-disk-doctor roots auto        Always figure the folders out (stops the first-run question)
+  dev-disk-doctor roots reset       Forget every saved choice and ask again next time
   dev-disk-doctor mcp              Start the MCP server on stdio (for AI agents)
 
 Options
@@ -28,7 +32,7 @@ Options
                          your home that contains a git repo (e.g. ~/acme). Also settable with
                          DEV_DISK_DOCTOR_ROOTS=/path/a:/path/b, or saved with "roots add <dir>".
                          Order: --root, then the env var, then saved folders, then auto-discovery.
-                         Run "roots" to see the result.
+                         The first time, in a terminal, you are asked which to use. Run "roots" to see the result.
   --min-size <MB>        Ignore items smaller than this (default 100)
   --stale-days <n>       Days idle before a project or worktree counts as stale (default 30)
   --only <detector>      Run one detector (docker, android, xcode, pkgcaches, browsers,
@@ -96,6 +100,39 @@ async function options(p: Parsed): Promise<ScanOptions> {
   });
 }
 
+/** Ask the first-run question on a real terminal. Prompts go to stderr so stdout stays clean for output. */
+function terminalIo(): { io: Io; close: () => void } {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  const abort = new AbortController();
+  rl.on('close', () => abort.abort());
+  rl.on('SIGINT', () => {
+    rl.close();
+    process.exit(130);
+  });
+  return {
+    io: {
+      say: (text) => console.error(text),
+      ask: (question) => rl.question(question, { signal: abort.signal }),
+    },
+    close: () => rl.close(),
+  };
+}
+
+/**
+ * When nothing says where to look (no --root, no env var, no saved folders, no earlier choice) and a person
+ * is at the terminal, ask once. Never asks for --json, piped output, or the MCP server.
+ */
+async function askRootsIfNeeded(p: Parsed): Promise<void> {
+  if (p.json || p.roots.length) return;
+  if (!process.stdin.isTTY || !process.stdout.isTTY || !process.stderr.isTTY) return;
+  const { io, close } = terminalIo();
+  try {
+    p.roots = (await askRoots(io, os.homedir())).roots;
+  } finally {
+    close();
+  }
+}
+
 async function main(): Promise<void> {
   const p = parse(process.argv.slice(2));
   switch (p.command) {
@@ -122,7 +159,17 @@ async function main(): Promise<void> {
         else console.log('No saved folders left. Folders are auto-discovered again.');
         return;
       }
-      if (sub !== undefined) throw new Error(`Unknown roots command "${sub}". Use: roots, roots add <dir>, roots remove <dir>.`);
+      if (sub === 'auto') {
+        await saveAutoDiscover(os.homedir());
+        console.log('Remembered: folders are figured out automatically, and the first-run question is not asked again.');
+        return;
+      }
+      if (sub === 'reset') {
+        await resetConfig(os.homedir());
+        console.log(`Removed ${configPath(os.homedir())}. You will be asked where to look the next time you run a scan.`);
+        return;
+      }
+      if (sub !== undefined) throw new Error(`Unknown roots command "${sub}". Use: roots, roots add <dir>, roots remove <dir>, roots auto, roots reset.`);
       const opts = await options(p);
       if (p.json) console.log(JSON.stringify({ roots: opts.roots }, null, 2));
       else if (opts.roots.length) console.log(opts.roots.join('\n'));
@@ -130,6 +177,7 @@ async function main(): Promise<void> {
       return;
     }
     case 'scan': {
+      await askRootsIfNeeded(p);
       const opts = await options(p);
       if (!p.json) console.error('Scanning (read-only)… this can take a minute on a big disk.');
       const result = await scan(opts);
@@ -137,6 +185,7 @@ async function main(): Promise<void> {
       return;
     }
     case 'worktrees': {
+      await askRootsIfNeeded(p);
       const opts = await options(p);
       if (!p.json) console.error('Auditing worktrees (read-only)…');
       const audit = await auditWorktrees(opts);
