@@ -4,7 +4,7 @@ import path from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
 import { applyAction, assertSafeToRemove } from '../src/core/fix.js';
 import { scan } from '../src/core/scan.js';
-import { fmtBytes, isInside, parseDockerSize } from '../src/core/util.js';
+import { daysAgo, fmtBytes, isInside, parseDockerSize } from '../src/core/util.js';
 import { android } from '../src/detectors/android.js';
 import { projects } from '../src/detectors/projects.js';
 import { opts, tmp, write } from './helpers.js';
@@ -24,6 +24,12 @@ describe('util', () => {
   it('isInside is not fooled by prefixes', () => {
     assert.equal(isInside('/a/bc', '/a/b'), false);
     assert.equal(isInside('/a/b/c', '/a/b'), true);
+  });
+  it('daysAgo counts whole days and is never negative', () => {
+    const now = Date.UTC(2026, 0, 10);
+    assert.equal(daysAgo(now - 3 * 86_400_000 - 1000, now), 3);
+    assert.equal(daysAgo(now, now), 0);
+    assert.equal(daysAgo(now + 5, now), 0, 'an mtime slightly in the future is 0 days, not -1');
   });
 });
 
