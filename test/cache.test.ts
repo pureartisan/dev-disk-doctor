@@ -83,6 +83,14 @@ describe('paging a scan', () => {
     assert.doesNotMatch(renderScan(result(30), style), /Showing \d+ of/);
   });
 
+  it('paints the hints light blue when colour is on', () => {
+    const out = renderScan(result(30), { color: true }, { footerHint: true });
+    // eslint-disable-next-line no-control-regex
+    const lightBlue = /\x1b\[(1;)?96m/;
+    assert.match(out.split('\n').find((l) => l.includes('items hidden')) ?? '', lightBlue);
+    assert.match(out.split('\n').find((l) => l.includes('Showing 25 of 30')) ?? '', lightBlue);
+  });
+
   it('ends with how long the scan took, when it was recorded', () => {
     const out = renderScan({ ...result(3), durationMs: 42_400 }, style).split('\n');
     assert.equal(out.at(-1), 'Scan took 42s.');

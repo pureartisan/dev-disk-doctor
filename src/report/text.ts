@@ -9,7 +9,8 @@ export interface Style {
 
 function paint(style: Style) {
   const c = (code: string) => (s: string) => (style.color ? `\u001b[${code}m${s}\u001b[0m` : s);
-  return { bold: c('1'), dim: c('2'), red: c('31'), yellow: c('33'), green: c('32'), cyan: c('36') };
+  // Light blue (bright cyan) for hints about what to run next, so they stand out from the dim detail text.
+  return { bold: c('1'), dim: c('2'), red: c('31'), yellow: c('33'), green: c('32'), cyan: c('36'), hint: c('96'), hintBold: c('1;96') };
 }
 
 const RISK_LABEL: Record<Risk, string> = { safe: 'SAFE', review: 'REVIEW', danger: 'CAREFUL' };
@@ -61,7 +62,7 @@ export function renderScan(
   shown.forEach((f, i) => out.push(renderFinding(f, offset + i + 1, p, riskTag, bin)));
   const hidden = r.findings.length - offset - shown.length;
   if (offset > 0 && shown.length === 0) out.push(p.dim(`Nothing at item ${offset + 1}: there are only ${r.findings.length}.`));
-  else if (hidden > 0) out.push(p.dim(`… ${hidden} ${offset > 0 ? 'more' : 'smaller'} items hidden. ${opts.moreHint ?? 'Use --all to see everything.'}`));
+  else if (hidden > 0) out.push(p.hint(`… ${hidden} ${offset > 0 ? 'more' : 'smaller'} items hidden. ${opts.moreHint ?? 'Use --all to see everything.'}`));
 
   if (r.skipped.length) {
     out.push('');
@@ -70,7 +71,7 @@ export function renderScan(
   out.push('');
   if (opts.footerHint && hidden > 0) {
     out.push(
-      `${p.bold(`Showing ${shown.length} of ${r.findings.length} items.`)} ${p.cyan(`${bin} show`)} scrolls through all of them (arrows or mouse wheel); ${p.cyan(`${bin} --all`)} prints them here.`,
+      `${p.hintBold(`Showing ${shown.length} of ${r.findings.length} items.`)} ${p.hintBold(`${bin} show`)}${p.hint(' scrolls through all of them (arrows or mouse wheel); ')}${p.hintBold(`${bin} --all`)}${p.hint(' prints them here.')}`,
     );
   }
   const safe = safeActions(r.findings);
