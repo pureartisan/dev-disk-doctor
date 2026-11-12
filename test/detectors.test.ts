@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
-import { applyAction, assertSafeToRemove } from '../src/core/fix.js';
+import { applyAction, assertSafeToRemove, safeActions } from '../src/core/fix.js';
 import { scan } from '../src/core/scan.js';
 import { daysAgo, fmtBytes, isInside, parseDockerSize } from '../src/core/util.js';
 import { android } from '../src/detectors/android.js';
@@ -119,6 +119,19 @@ describe('fix safety', () => {
     const out = await applyAction(opts(home, { roots: [] }), 'system:ios-backups#manage', true);
     assert.equal(out.ok, false);
     assert.ok(existsSync(path.join(home, 'Library/Application Support/MobileSync/Backup/abc/file')));
+  });
+
+  it('never offers to delete ~/Library/Logs, which macOS protects', async () => {
+    const home = tmp();
+    write(path.join(home, 'Library/Logs/app.log'), 'x'.repeat(2000));
+    const res = await scan(opts(home, { only: ['system'], roots: [], minBytes: 0 }));
+    const logs = res.findings.find((f) => f.id === 'system:logs');
+    assert.ok(logs, 'still listed so the space is visible');
+    assert.ok(logs.actions.length > 0 && logs.actions.every((a) => a.kind.type === 'manual'));
+    assert.ok(!safeActions(res.findings).some((x) => x.finding.id === 'system:logs'));
+    const out = await applyAction(opts(home, { roots: [], minBytes: 0 }), 'system:logs#protected', true);
+    assert.equal(out.ok, false);
+    assert.ok(existsSync(path.join(home, 'Library/Logs/app.log')));
   });
 
   it('fails safely on an id that no longer exists', async () => {

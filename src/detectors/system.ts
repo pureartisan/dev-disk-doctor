@@ -36,9 +36,13 @@ export const system: Detector = {
         category: 'system',
         title: 'User logs (~/Library/Logs)',
         path: path.join(h, 'Library/Logs'),
-        risk: 'safe',
+        risk: 'review',
         regenerable: true,
         why: 'Application and crash logs. Apps recreate them.',
+        // macOS will not let this tool remove the folder (EACCES), so it is only ever shown, never run or selectable.
+        actions: (id) => [
+          manualAction(id, 'protected', 'Protected by macOS: this tool cannot delete it', 'open ~/Library/Logs', 'review', 'macOS protects this folder. Clear old logs inside it by hand if you want the space.'),
+        ],
       },
       opts,
     );
