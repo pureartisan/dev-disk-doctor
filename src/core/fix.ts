@@ -3,7 +3,7 @@ import path from 'node:path';
 import { run } from './exec.js';
 import { diskInfo, scan } from './scan.js';
 import { assertSafeToRemove } from './safety.js';
-import type { Action, Finding, ScanOptions } from './types.js';
+import type { Action, Finding, Risk, ScanOptions, ScanResult } from './types.js';
 
 export interface FixOutcome {
   ok: boolean;
@@ -114,11 +114,45 @@ export function safeActions(findings: Finding[]): PlanItem[] {
 export interface BatchHooks {
   onPlan?: (plan: PlanItem[], warnings: string[]) => void;
   onItem?: (item: BatchItem, index: number, total: number) => void;
+  /** Called with the items left out because they changed since the scan they came from. */
+  onDropped?: (dropped: PlanItem[]) => void;
 }
 
 export interface PlanItem {
   finding: Finding;
   action: Action;
+}
+
+/** A plan built from a scan older than this is checked against a fresh look at its detectors before it runs. */
+export const RECHECK_AFTER_MS = 60_000;
+
+const RISK_RANK: Record<Risk, number> = { safe: 0, review: 1, danger: 2 };
+
+/**
+ * Looks again at just the detectors behind `plan` and keeps only what is still on offer and no riskier than
+ * before (a worktree that has since gained uncommitted changes turns up as at-risk and is dropped). The kept items
+ * come from the fresh look, so the guards in `runAction` see current state.
+ */
+export async function recheckPlan(opts: ScanOptions, plan: PlanItem[]): Promise<{ plan: PlanItem[]; dropped: PlanItem[] }> {
+  const ids = [...new Set(plan.map((p) => p.finding.detector))];
+  const fresh = new Map<string, Finding[]>();
+  await Promise.all(ids.map(async (id) => fresh.set(id, id === 'biggest' ? [] : (await scan({ ...opts, only: [id], minBytes: 0 })).findings)));
+  const kept: PlanItem[] = [];
+  const dropped: PlanItem[] = [];
+  for (const item of plan) {
+    const hit = findAction(fresh.get(item.finding.detector) ?? [], item.action.id);
+    if (
+      hit &&
+      hit.action.kind.type !== 'manual' &&
+      RISK_RANK[hit.finding.risk] <= RISK_RANK[item.finding.risk] &&
+      RISK_RANK[hit.action.risk] <= RISK_RANK[item.action.risk]
+    ) {
+      kept.push(hit);
+    } else {
+      dropped.push(item);
+    }
+  }
+  return { plan: kept, dropped };
 }
 
 /**
@@ -136,14 +170,26 @@ export function runnableActions(findings: Finding[]): PlanItem[] {
   return picked;
 }
 
-/** Scans once, then runs every safe action, largest first. A failure does not stop the rest. Dry run unless `confirm`. */
-export async function applySafe(opts: ScanOptions, confirm = false, hooks: BatchHooks = {}): Promise<BatchOutcome> {
-  const result = await scan(opts);
-  return applyPlan(opts, safeActions(result.findings), confirm, hooks);
+/**
+ * Runs every safe action from `from` (or from a new scan when none is given), largest first. A failure does not
+ * stop the rest. Dry run unless `confirm`.
+ */
+export async function applySafe(opts: ScanOptions, confirm = false, hooks: BatchHooks = {}, from?: ScanResult): Promise<BatchOutcome> {
+  const result = from ?? (await scan(opts));
+  return applyPlan(opts, safeActions(result.findings), confirm, hooks, result.generatedAt);
 }
 
-/** Runs the given actions in order. A failure does not stop the rest. Dry run unless `confirm`. */
-export async function applyPlan(opts: ScanOptions, plan: PlanItem[], confirm = false, hooks: BatchHooks = {}): Promise<BatchOutcome> {
+/**
+ * Runs the given actions in order. A failure does not stop the rest. Dry run unless `confirm`.
+ * `scannedAt` is when the plan's scan was taken: when that is over a minute ago, the plan is re-checked first.
+ */
+export async function applyPlan(opts: ScanOptions, planned: PlanItem[], confirm = false, hooks: BatchHooks = {}, scannedAt?: string): Promise<BatchOutcome> {
+  let plan = planned;
+  if (confirm && scannedAt && Date.now() - Date.parse(scannedAt) > RECHECK_AFTER_MS) {
+    const checked = await recheckPlan(opts, plan);
+    plan = checked.plan;
+    if (checked.dropped.length) hooks.onDropped?.(checked.dropped);
+  }
   const warnings = [...new Set(plan.flatMap((p) => (p.action.warning ? [p.action.warning] : [])))];
   hooks.onPlan?.(plan, warnings);
 
