@@ -29,7 +29,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      actions: write   # to ask for a release below
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
@@ -38,17 +37,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Merge updates that contain no major bumps
-        id: merge
         if: steps.metadata.outputs.dependency-names != '' && !contains(fromJSON(steps.metadata.outputs.updated-dependencies-json).*.updateType, 'version-update:semver-major')
         run: gh pr merge --squash --delete-branch "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Only runtime dependencies change what users install. The workflow it starts does nothing
-      # unless the repository variable AUTO_RELEASE is "true" (see docs/RELEASING.md).
-      - name: Ask for a release when a runtime dependency changed
-        if: steps.merge.outcome == 'success' && contains(fromJSON(steps.metadata.outputs.updated-dependencies-json).*.dependencyType, 'direct:production')
-        run: gh workflow run auto-release.yml --repo "$GITHUB_REPOSITORY" --ref main
-        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
