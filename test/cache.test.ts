@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { clearScan, describeAge, loadScan, saveScan, scanCachePath } from '../src/core/cache.js';
 import type { Finding, ScanResult } from '../src/core/types.js';
-import { PROMPT, page, screenLines } from '../src/report/pager.js';
+import { page, promptFor, screenLines } from '../src/report/pager.js';
 import { fmtDuration } from '../src/core/util.js';
 import { renderScan } from '../src/report/text.js';
 import { tmp } from './helpers.js';
@@ -121,9 +121,20 @@ describe('paging a scan', () => {
 describe('pager prompt', () => {
   it('has none of the characters less reads as prompt syntax, which would cut the help text short', () => {
     // less ends a prompt at ":" or "?" outside a conditional, so "scroll: arrows ..." showed only "scroll".
-    assert.doesNotMatch(PROMPT.replace('%pb\\%', ''), /[:?.]/);
-    assert.match(PROMPT, /arrows or mouse wheel/);
-    assert.match(PROMPT, /q = quit/);
+    for (const columns of [30, 50, 60, 80, 100, 200]) assert.doesNotMatch(promptFor(columns).replace('%pb\\%', ''), /[:?.]/);
+  });
+
+  it('uses the fullest wording that fits on one row, since less shows only the end of a prompt that is too wide', () => {
+    const shown = (columns: number) => promptFor(columns).replace('%pb\\%', '100%');
+    assert.match(promptFor(100), /^scroll with arrows or mouse wheel/);
+    for (const columns of [58, 70, 80, 100, 140]) assert.ok(shown(columns).length <= columns, `fits ${columns} columns: "${shown(columns)}"`);
+    assert.ok(promptFor(53).startsWith('q quit') || promptFor(53).startsWith('arrows/wheel'), 'a narrow pane gets a shorter line');
+    assert.ok(shown(53).length <= 53, 'fits the 53-column pane it was reported on');
+    for (const columns of [30, 53, 80, 100]) assert.match(promptFor(columns), /q (= )?quit/);
+  });
+
+  it('falls back to the default width when the terminal width is unknown', () => {
+    assert.equal(promptFor(undefined), promptFor(80));
   });
 });
 
