@@ -69,20 +69,29 @@ Version numbers on npm can never be reused. If a published version is bad, ship 
 
 The `automerge-dependabot` job in [`ci.yml`](../.github/workflows/ci.yml) squash-merges a Dependabot PR once every test job has passed, unless it contains a **major** bump. Major bumps stay open for a person to review.
 
-### Auto release (off by default)
+### Daily auto release (schedule off by default)
 
-Merging a dependency update does not release anything by itself. To have a patch release cut for updates that change what users install, turn on the switch:
+Merging a dependency update does not release anything by itself. [`auto-release.yml`](../.github/workflows/auto-release.yml) runs once a day (07:00 UTC) and cuts **one** patch release if Dependabot updates to **runtime** dependencies (`dependencies` in `package.json`) were merged since the last release tag. A day of updates is therefore one version, not one per merge. It finds them by their `chore(deps):` commit titles, which `dependabot.yml` sets. Dev dependency (`chore(deps-dev):`), GitHub Actions (`ci:`) and major updates never trigger it.
+
+The daily schedule is off until you turn it on:
 
 ```bash
 gh variable set AUTO_RELEASE --body true -R pureartisan/dev-disk-doctor
 gh variable delete AUTO_RELEASE -R pureartisan/dev-disk-doctor     # off again
 ```
 
-With it on, after Dependabot merges an update to a **runtime** dependency (`dependencies` in `package.json`), [`auto-release.yml`](../.github/workflows/auto-release.yml) bumps the patch version, commits `chore: release X.Y.Z` to `main`, pushes the tag and starts `release.yml` on it. Dev dependency, GitHub Actions and major updates never trigger it.
+Run it by hand any time, whatever the variable says (Actions tab → **Auto release** → **Run workflow**, or the command below). It releases only if there are runtime dependency updates waiting; tick **force** (`-f force=true`) to release anyway when there is at least one new commit since the last tag.
 
-This does not publish to the public registry on its own. `release.yml` still only **stages** the version on npm, and you approve it with 2FA as described below. Reject a staged version you do not want. Several merged updates in a row each produce their own version, so approve the newest and reject the rest.
+```bash
+gh workflow run auto-release.yml -R pureartisan/dev-disk-doctor
+gh workflow run auto-release.yml -R pureartisan/dev-disk-doctor -f force=true
+```
 
-It pushes straight to `main`, which only works while `main` has no branch protection or ruleset that blocks the GitHub Actions bot.
+When it releases, it bumps the patch version, commits `chore: release X.Y.Z` to `main`, pushes the tag and starts `release.yml` on it. The run summary lists the updates that were found, or says why nothing was released.
+
+This does not publish to the public registry on its own. `release.yml` still only **stages** the version on npm, and you approve it with 2FA as described below. Reject a staged version you do not want.
+
+It pushes straight to `main`, which only works while `main` has no branch protection or ruleset that blocks the GitHub Actions bot. GitHub also pauses scheduled workflows after 60 days without repository activity; a manual run or any push re-enables them.
 
 ## What the workflow does
 
