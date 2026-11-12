@@ -1,8 +1,8 @@
 name: Release
 
-# Publishes to npm when a version tag is pushed:
-#   npm version patch   (or minor / major)
-#   git push --follow-tags
+# Stages a release on npm when a version tag is pushed (see docs/RELEASING.md):
+#   bump the version in a PR, merge it, then
+#   git tag vX.Y.Z && git push origin vX.Y.Z
 on:
   push:
     tags: ['v*']
