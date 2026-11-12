@@ -74,6 +74,8 @@ export interface Detector {
   title: string;
   /** Slow detectors only run with `deep`. */
   deepOnly?: boolean;
+  /** Runs after the regular detectors, so `covered()` already holds their findings. */
+  late?: boolean;
   /** `covered` returns findings from earlier detectors (used by the deep sweep). */
   run(opts: ScanOptions, covered: () => Finding[]): Promise<Finding[]>;
 }

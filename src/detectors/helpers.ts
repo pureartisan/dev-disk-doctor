@@ -1,5 +1,5 @@
 import { sizeOf } from '../core/size.js';
-import { shellQuote } from '../core/util.js';
+import { isInside, shellQuote } from '../core/util.js';
 import type { Action, Category, Finding, Risk, ScanOptions } from '../core/types.js';
 
 export function removeAction(
@@ -97,4 +97,14 @@ export async function pathFinding(spec: PathFindingSpec, opts: ScanOptions): Pro
 export async function pathFindings(specs: PathFindingSpec[], opts: ScanOptions): Promise<Finding[]> {
   const out = await Promise.all(specs.map((s) => pathFinding(s, opts)));
   return out.filter((f): f is Finding => f !== undefined);
+}
+
+/**
+ * Bytes under `p` that earlier findings already explain, counting nested findings once.
+ * `count` is how many outermost findings sit inside `p` (or are `p` itself).
+ */
+export function explainedUnder(p: string, known: Finding[]): { bytes: number; count: number } {
+  const inside = known.filter((f) => f.path && f.bytes > 0 && isInside(f.path, p));
+  const outer = inside.filter((f) => !inside.some((g) => g !== f && g.path !== f.path && isInside(f.path!, g.path!)));
+  return { bytes: outer.reduce((sum, f) => sum + f.bytes, 0), count: outer.length };
 }
