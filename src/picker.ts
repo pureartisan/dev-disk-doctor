@@ -11,10 +11,14 @@ export interface Row {
   bytes: number;
 }
 
+/**
+ * The checklist rows: the SAFE ones, which start ticked, come first so they are on the first screen, then the
+ * REVIEW ones. Within each group the order of `items` (biggest first) is kept.
+ */
 export function buildRows(items: PlanItem[]): Row[] {
   const perFinding = new Map<string, number>();
   for (const { finding } of items) perFinding.set(finding.id, (perFinding.get(finding.id) ?? 0) + 1);
-  return items.map((item) => ({
+  const rows = items.map((item) => ({
     id: item.action.id,
     item,
     safe: item.finding.risk === 'safe' && item.action.risk === 'safe',
@@ -22,6 +26,7 @@ export function buildRows(items: PlanItem[]): Row[] {
     title: perFinding.get(item.finding.id)! > 1 ? `${item.finding.title}: ${item.action.label}` : item.finding.title,
     bytes: item.finding.bytes,
   }));
+  return [...rows.filter((r) => r.safe), ...rows.filter((r) => !r.safe)];
 }
 
 /**
@@ -182,6 +187,18 @@ function fit(text: string, width: number): string {
   return text.length <= width ? text : `${text.slice(0, Math.max(0, width - 1))}…`;
 }
 
+/**
+ * Cut the middle out of `text` instead of the end. Titles share their start ("node_modules in ~/dev/...") and
+ * differ at the end (the worktree name, "(idle 15d)"), so both ends are kept, with a bit more of the end.
+ */
+export function fitMiddle(text: string, width: number): string {
+  if (text.length <= width) return text;
+  if (width <= 1) return '…'.slice(0, Math.max(0, width));
+  const room = width - 1;
+  const head = Math.floor(room * 0.35);
+  return `${text.slice(0, head)}…${text.slice(text.length - (room - head))}`;
+}
+
 export function totals(rows: Row[], selected: ReadonlySet<string>): { count: number; bytes: number; review: number } {
   const chosen = rows.filter((r) => selected.has(r.id));
   return { count: chosen.length, bytes: chosen.reduce((n, r) => n + r.bytes, 0), review: chosen.filter((r) => !r.safe).length };
@@ -199,7 +216,7 @@ export function renderPicker(state: PickerState, rows: Row[], size: { rows: numb
     const reviews = rows.filter((r) => state.selected.has(r.id) && !r.safe);
     if (reviews.length) {
       lines.push(p.yellow(`${reviews.length} of these need a look first:`));
-      for (const r of reviews.slice(0, Math.max(1, view - 8))) lines.push(`  ${p.yellow('•')} ${fit(r.title, size.columns - 6)}`);
+      for (const r of reviews.slice(0, Math.max(1, view - 8))) lines.push(`  ${p.yellow('•')} ${fitMiddle(r.title, size.columns - 6)}`);
       if (reviews.length > view - 8) lines.push(p.dim(`  … and ${reviews.length - Math.max(1, view - 8)} more`));
       lines.push('');
     }
@@ -221,7 +238,7 @@ export function renderPicker(state: PickerState, rows: Row[], size: { rows: numb
     const r = rows[i];
     const on = state.selected.has(r.id);
     const tag = r.safe ? p.green('SAFE  ') : p.yellow('REVIEW');
-    const line = `${i === state.cursor ? p.cyan('>') : ' '} ${on ? p.green('[x]') : '[ ]'} ${p.bold(fmtBytes(r.bytes).padStart(8))}  ${tag}  ${fit(r.title, titleWidth)}`;
+    const line = `${i === state.cursor ? p.cyan('>') : ' '} ${on ? p.green('[x]') : '[ ]'} ${p.bold(fmtBytes(r.bytes).padStart(8))}  ${tag}  ${fitMiddle(r.title, titleWidth)}`;
     lines.push(i === state.cursor ? p.inverse(line) : line);
   }
   lines.push(p.dim(`${rows.length ? state.cursor + 1 : 0}/${rows.length}${rows.length > view ? ' · scroll for more' : ''}`));
