@@ -1,6 +1,6 @@
 {
   "name": "dev-disk-doctor",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Why is my disk full? A read-only disk and git-worktree doctor for developer machines (Docker, Xcode, Android, node_modules, caches). CLI + MCP server for AI agents.",
   "license": "MIT",
   "author": "Prageeth Silva",
