@@ -21,7 +21,7 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
-      - name: Update npm (trusted publishing needs npm 11.5.1 or newer)
+      - name: Update npm (staged publishing needs npm 11.15.0 or newer)
         run: npm install -g npm@11
       - run: npm ci
       - name: Tag must match package.json version
@@ -33,7 +33,9 @@ jobs:
           fi
       - run: npm test
       # Authenticates with npm through OIDC (trusted publisher for release.yml), so no token is stored.
-      - run: npm publish --provenance --access public
+      # The version is only staged: a maintainer approves it (with 2FA) on npmjs.com or with
+      # `npm stage approve <stage-id>` before it goes live.
+      - run: npm stage publish --provenance --access public
       - name: GitHub release
         run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
         env:
