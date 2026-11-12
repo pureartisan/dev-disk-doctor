@@ -2,13 +2,15 @@
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
+import { clearScan, describeAge, loadScan, saveScan } from './core/cache.js';
 import { addCustomCache, addSavedRoot, configPath, listCustomCaches, removeCustomCache, removeSavedRoot, resetConfig, saveAutoDiscover } from './core/config.js';
 import { applyAction, applySafe } from './core/fix.js';
 import { buildOptions, scan } from './core/scan.js';
 import { version } from './core/version.js';
-import type { ScanOptions } from './core/types.js';
+import type { ScanOptions, ScanResult } from './core/types.js';
 import { expandHome } from './core/util.js';
 import { askRoots, type Io } from './prompt.js';
+import { page } from './report/pager.js';
 import { startSpinner } from './report/spinner.js';
 import { binName, renderBatchItem, renderBatchPlan, renderBatchSummary, renderScan, renderWorktrees } from './report/text.js';
 import { auditWorktrees } from './worktrees/audit.js';
@@ -19,6 +21,7 @@ const HELP = `dev-disk-doctor: find out why your developer machine's disk is ful
 
 Usage
   dev-disk-doctor [scan]            Scan for space hogs (read-only)
+  dev-disk-doctor show              Scroll through the last scan without scanning again (scans first if none is saved)
   dev-disk-doctor worktrees         Audit git worktrees across all your repos (read-only)
   dev-disk-doctor fix <action-id>   Show what an action would do; add --yes to run it
   dev-disk-doctor fix safe          Same, for every SAFE item at once (add --yes to run them)
@@ -49,10 +52,16 @@ Options
                          review (default) if you want to look first
   --deep                 Also sweep your whole home folder for unknown space hogs (slow)
   --all                  Show every finding instead of the top 25
+  --from <n>             With "show": start at item n (1 is the biggest)
+  --count <n>            With "show": list n items
+  --force                With "show": throw away the saved scan and scan again
+  --no-pager             With "show": print instead of opening a scrollable view (also the case when piped)
+  --no-mouse             With "show": keyboard scrolling only, so the terminal keeps handling text selection
   --yes                  With "fix": actually run the action
   --no-color             Plain output
   -v, --version          Print the version
 
+Each text scan is saved to ~/.dev-disk-doctor/last-scan.json for "show"; it is only displayed, "fix" always re-scans.
 Nothing is deleted unless you run "fix <id> --yes" or "fix safe --yes". REVIEW items are only run
 one at a time, by id. Actions marked CAREFUL are never run by the tool.`;
 
@@ -69,11 +78,22 @@ interface Parsed {
   deep: boolean;
   all: boolean;
   yes: boolean;
+  force: boolean;
+  pager: boolean;
+  mouse: boolean;
+  from?: number;
+  count?: number;
   color: boolean;
 }
 
+function positiveInt(flag: string, v: string): number {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`${flag} needs a whole number of 1 or more.`);
+  return n;
+}
+
 function parse(argv: string[]): Parsed {
-  const p: Parsed = { command: 'scan', positional: [], json: false, roots: [], only: [], deep: false, all: false, yes: false, color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR };
+  const p: Parsed = { command: 'scan', positional: [], json: false, roots: [], only: [], deep: false, all: false, yes: false, force: false, pager: true, mouse: true, color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR };
   const args = [...argv];
   const need = (flag: string) => {
     const v = args.shift();
@@ -96,6 +116,11 @@ function parse(argv: string[]): Parsed {
     }
     else if (a === '--deep') p.deep = true;
     else if (a === '--all') p.all = true;
+    else if (a === '--from') p.from = positiveInt(a, need(a));
+    else if (a === '--count') p.count = positiveInt(a, need(a));
+    else if (a === '--force') p.force = true;
+    else if (a === '--no-pager') p.pager = false;
+    else if (a === '--no-mouse') p.mouse = false;
     else if (a === '--yes' || a === '-y') p.yes = true;
     else if (a === '--no-color') p.color = false;
     else if (a === '-h' || a === '--help' || a === 'help') p.command = 'help';
@@ -149,6 +174,15 @@ async function askRootsIfNeeded(p: Parsed): Promise<void> {
     p.roots = (await askRoots(io, os.homedir())).roots;
   } finally {
     close();
+  }
+}
+
+async function scanWithSpinner(p: Parsed, opts: ScanOptions): Promise<ScanResult> {
+  const spinner = p.json ? undefined : startSpinner(SCANNING);
+  try {
+    return await scan(opts);
+  } finally {
+    spinner?.stop();
   }
 }
 
@@ -215,14 +249,35 @@ async function main(): Promise<void> {
     case 'scan': {
       await askRootsIfNeeded(p);
       const opts = await options(p);
-      const spinner = p.json ? undefined : startSpinner(SCANNING);
-      let result;
-      try {
-        result = await scan(opts);
-      } finally {
-        spinner?.stop();
+      const result = await scanWithSpinner(p, opts);
+      if (!p.json) await saveScan(opts.home, result);
+      const moreHint = `Use --all to list them here, or run "${binName()} show" to scroll through all of them (arrow keys or mouse wheel).`;
+      console.log(p.json ? JSON.stringify(result, null, 2) : renderScan(result, { color: p.color }, { limit: p.all ? Infinity : 25, moreHint }));
+      return;
+    }
+    case 'show': {
+      const home = os.homedir();
+      if (p.force) await clearScan(home);
+      let result = await loadScan(home);
+      const saved = Boolean(result);
+      if (!result) {
+        await askRootsIfNeeded(p);
+        const opts = await options(p);
+        result = await scanWithSpinner(p, opts);
+        await saveScan(opts.home, result);
       }
-      console.log(p.json ? JSON.stringify(result, null, 2) : renderScan(result, { color: p.color }, { limit: p.all ? Infinity : 25 }));
+      if (p.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      const interactive = p.pager && Boolean(process.stdout.isTTY);
+      const offset = (p.from ?? 1) - 1;
+      const limit = p.count ?? (p.all || interactive ? Infinity : 25);
+      const next = offset + limit + 1;
+      const moreHint = `Use --from ${next} for the next ones, or --all.`;
+      const age = saved ? `From the scan taken ${describeAge(result.generatedAt)}. Sizes may have changed; run "${binName()} show --force" to scan again.` : 'Scanned just now.';
+      const text = `${age}\n${renderScan(result, { color: p.color }, { limit, offset, moreHint })}`;
+      if (!(interactive && (await page(text, { rows: process.stdout.rows, columns: process.stdout.columns, mouse: p.mouse })))) console.log(text);
       return;
     }
     case 'worktrees': {
@@ -258,11 +313,13 @@ async function main(): Promise<void> {
         } finally {
           spinner?.stop();
         }
+        if (p.yes) await clearScan(opts.home);
         console.log(p.json ? JSON.stringify(batch, null, 2) : renderBatchSummary(batch, style));
         if (!batch.ok) process.exitCode = 1;
         return;
       }
       const res = await applyAction(opts, id, p.yes);
+      if (p.yes && !res.dryRun) await clearScan(opts.home);
       if (p.json) console.log(JSON.stringify(res, null, 2));
       else {
         console.log(res.message);
