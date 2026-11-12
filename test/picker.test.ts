@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { runnableActions, type PlanItem } from '../src/core/fix.js';
 import type { Action, Finding, Risk } from '../src/core/types.js';
-import { buildRows, initialState, parseKeys, renderPicker, selectedPlan, step, viewHeight, type Key, type PickerState, type Row } from '../src/picker.js';
+import { buildRows, fitMiddle, initialState, parseKeys, renderPicker, selectedPlan, step, viewHeight, type Key, type PickerState, type Row } from '../src/picker.js';
 
 const MB = 1024 * 1024;
 
@@ -28,7 +28,22 @@ const press = (s: PickerState, ...names: (string | Key)[]) => names.reduce<Picke
 
 describe('what the checklist offers', () => {
   it('never lists instructions-only or danger-rated items', () => {
-    assert.deepEqual(rows.map((r) => r.id), ['a#go', 'b#go', 'c#go']);
+    assert.deepEqual([...rows.map((r) => r.id)].sort(), ['a#go', 'b#go', 'c#go']);
+  });
+
+  it('lists the ticked SAFE rows first, then REVIEW rows, each biggest first', () => {
+    assert.deepEqual(rows.map((r) => r.id), ['a#go', 'c#go', 'b#go']);
+    const mixed = buildRows(
+      runnableActions([
+        fin('r1', 'review', 900 * MB, [act('r1#go', 'review')]),
+        fin('s1', 'safe', 100 * MB, [act('s1#go', 'safe')]),
+        fin('r2', 'review', 800 * MB, [act('r2#go', 'review')]),
+        fin('s2', 'safe', 50 * MB, [act('s2#go', 'safe')]),
+      ]),
+    );
+    assert.deepEqual(mixed.map((r) => r.id), ['s1#go', 's2#go', 'r1#go', 'r2#go']);
+    const ticked = initialState(mixed).selected;
+    assert.deepEqual(mixed.slice(0, ticked.size).map((r) => r.id), [...ticked].sort(), 'everything ticked at the start is at the top');
   });
 
   it('ticks SAFE rows and leaves REVIEW rows unticked to start', () => {
@@ -44,7 +59,7 @@ describe('what the checklist offers', () => {
 describe('ticking', () => {
   it('toggles the row under the cursor and moves with the arrows and wheel', () => {
     let s = initialState(rows);
-    s = press(s, 'down', 'space');
+    s = press(s, 'down', 'down', 'space');
     assert.ok(s.selected.has('b#go'));
     s = press(s, 'space');
     assert.ok(!s.selected.has('b#go'));
@@ -63,9 +78,9 @@ describe('ticking', () => {
   });
 
   it('ticks the clicked row', () => {
-    const s = press(initialState(rows), { name: 'click', y: 4 + 1 });
+    const s = press(initialState(rows), { name: 'click', y: 4 + 2 });
     assert.ok(s.selected.has('b#go'));
-    assert.equal(s.cursor, 1);
+    assert.equal(s.cursor, 2);
     assert.equal(press(initialState(rows), { name: 'click', y: 1 }).selected.size, 2, 'a click on the header does nothing');
   });
 });
@@ -141,5 +156,32 @@ describe('drawing', () => {
     assert.match(out, /Run 1 action\?/);
     assert.match(out, /Warned thing/);
     assert.match(out, /Quit the app first\./);
+  });
+});
+
+describe('long titles', () => {
+  const title = 'node_modules in ~/dev/clients/pm/pm-mobile-app/.claude/worktrees/catalogue-bitbucket-registry-64fbe1 (idle 15d)';
+
+  it('cuts the middle and keeps both ends, to exactly the width', () => {
+    const cut = fitMiddle(title, 70);
+    assert.equal(cut.length, 70);
+    assert.ok(cut.startsWith('node_modules in ~/dev/'));
+    assert.ok(cut.endsWith('registry-64fbe1 (idle 15d)'), 'the part that tells rows apart survives');
+    assert.ok(cut.includes('…'));
+  });
+
+  it('leaves a title that fits alone, and copes with tiny widths', () => {
+    assert.equal(fitMiddle('short', 10), 'short');
+    assert.equal(fitMiddle(title, 1), '…');
+    assert.equal(fitMiddle(title, 0), '');
+    assert.equal(fitMiddle(title, 2).length, 2);
+  });
+
+  it('shows the worktree name and idle age in the checklist rows', () => {
+    const long = buildRows(runnableActions([fin('w', 'review', 4000 * MB, [act('w#go', 'review')], title)]));
+    const lines = renderPicker(initialState(long), long, { rows: 12, columns: 80 }, { color: false });
+    const row = lines.find((l) => l.includes('node_modules in'))!;
+    assert.ok(row.endsWith('(idle 15d)'), row);
+    assert.ok(row.length <= 80);
   });
 });
