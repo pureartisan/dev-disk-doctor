@@ -9,8 +9,11 @@ import { version } from './core/version.js';
 import type { ScanOptions } from './core/types.js';
 import { expandHome } from './core/util.js';
 import { askRoots, type Io } from './prompt.js';
+import { startSpinner } from './report/spinner.js';
 import { binName, renderBatchItem, renderBatchPlan, renderBatchSummary, renderScan, renderWorktrees } from './report/text.js';
 import { auditWorktrees } from './worktrees/audit.js';
+
+const SCANNING = 'Scanning (read-only)… this can take a minute on a big disk.';
 
 const HELP = `dev-disk-doctor: find out why your developer machine's disk is full
 
@@ -212,16 +215,26 @@ async function main(): Promise<void> {
     case 'scan': {
       await askRootsIfNeeded(p);
       const opts = await options(p);
-      if (!p.json) console.error('Scanning (read-only)… this can take a minute on a big disk.');
-      const result = await scan(opts);
+      const spinner = p.json ? undefined : startSpinner(SCANNING);
+      let result;
+      try {
+        result = await scan(opts);
+      } finally {
+        spinner?.stop();
+      }
       console.log(p.json ? JSON.stringify(result, null, 2) : renderScan(result, { color: p.color }, { limit: p.all ? Infinity : 25 }));
       return;
     }
     case 'worktrees': {
       await askRootsIfNeeded(p);
       const opts = await options(p);
-      if (!p.json) console.error('Auditing worktrees (read-only)…');
-      const audit = await auditWorktrees(opts);
+      const spinner = p.json ? undefined : startSpinner('Auditing worktrees (read-only)…');
+      let audit;
+      try {
+        audit = await auditWorktrees(opts);
+      } finally {
+        spinner?.stop();
+      }
       console.log(p.json ? JSON.stringify(audit, null, 2) : renderWorktrees(audit, { color: p.color }, opts.home));
       return;
     }
@@ -232,11 +245,19 @@ async function main(): Promise<void> {
       if (id === 'safe') {
         const text = !p.json;
         const style = { color: p.color };
-        if (text) console.error('Scanning (read-only)… this can take a minute on a big disk.');
-        const batch = await applySafe(opts, p.yes, {
-          onPlan: (plan, warnings) => text && plan.length && console.log(renderBatchPlan(plan.length, warnings, !p.yes, style)),
-          onItem: (item, i, total) => text && console.log(renderBatchItem(item, i, total, style)),
-        });
+        const spinner = text ? startSpinner(SCANNING) : undefined;
+        let batch;
+        try {
+          batch = await applySafe(opts, p.yes, {
+            onPlan: (plan, warnings) => {
+              spinner?.stop();
+              if (text && plan.length) console.log(renderBatchPlan(plan.length, warnings, !p.yes, style));
+            },
+            onItem: (item, i, total) => text && console.log(renderBatchItem(item, i, total, style)),
+          });
+        } finally {
+          spinner?.stop();
+        }
         console.log(p.json ? JSON.stringify(batch, null, 2) : renderBatchSummary(batch, style));
         if (!batch.ok) process.exitCode = 1;
         return;
