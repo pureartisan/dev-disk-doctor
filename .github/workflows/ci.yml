@@ -21,6 +21,23 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  bundle:
+    # The release attaches an offline-installable bundle; make sure it still builds and runs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run bundle
+      - name: Install the bundle with the npm registry unreachable
+        run: |
+          npm install -g --prefix "$RUNNER_TEMP/prefix" --cache "$RUNNER_TEMP/cache" \
+            --registry http://127.0.0.1:9 --fetch-retries=0 ./release/dev-disk-doctor-*.tgz
+          "$RUNNER_TEMP/prefix/bin/dev-disk-doctor" --version
+
   automerge-dependabot:
     # Merges Dependabot minor/patch bumps once every test job has passed. Major bumps are left open.
     needs: [test]

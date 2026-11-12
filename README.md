@@ -32,6 +32,25 @@ dev-disk-doctor --version           # check it worked
 - **Try it without installing:** `npx dev-disk-doctor@latest`. `npx` runs the tool from a temporary cache and leaves no `dev-disk-doctor` command behind, so use `npm install -g` if you want the plain command. Keep the `@latest`: without it, `npx` may reuse an older copy it cached earlier.
 - If the shell says `dev-disk-doctor: command not found` after installing, the folder npm puts global commands in is not on your `PATH`. `npm config get prefix` shows it; add `<prefix>/bin` to `PATH`.
 
+### Install without npm (from a release bundle)
+
+If your machine cannot reach the npm registry, or cannot find the package on it (a locked-down work laptop, a private registry mirror), install the **bundle** from the [GitHub releases](https://github.com/pureartisan/dev-disk-doctor/releases) instead. It is the same package with its dependencies packed inside, so installing it makes no request to any npm registry. You only need Node.js 18 or newer.
+
+```bash
+# download the newest bundle (or pick a version on the releases page, or download it in a browser)
+curl -fsSL -O https://github.com/pureartisan/dev-disk-doctor/releases/latest/download/dev-disk-doctor.tgz
+
+npm install -g ./dev-disk-doctor.tgz     # install the dev-disk-doctor command
+dev-disk-doctor --version                # check it worked
+```
+
+- **Pin a version:** download `dev-disk-doctor-X.Y.Z.tgz` from that release's assets instead, for example `https://github.com/pureartisan/dev-disk-doctor/releases/download/v0.4.0/dev-disk-doctor-0.4.0.tgz`.
+- **Update:** download the newest bundle and run the same `npm install -g` again.
+- **Uninstall:** `npm uninstall -g dev-disk-doctor`
+- **No GitHub access either:** download the `.tgz` on another machine and copy it over (USB, shared drive). It is a single file of about 3.5 MB.
+- **Build a bundle yourself** from a clone of this repo: `npm install && npm run bundle` writes `release/dev-disk-doctor-X.Y.Z.tgz`.
+- **MCP client:** point it at the installed command instead of `npx`: `"command": "dev-disk-doctor", "args": ["mcp"]` (see [Use it with an AI agent](#use-it-with-an-ai-agent-mcp)).
+
 The examples below use the installed `dev-disk-doctor` command. If you did not install it, replace `dev-disk-doctor` with `npx dev-disk-doctor@latest`.
 
 ## Getting started
@@ -251,6 +270,7 @@ dev-disk-doctor is built mainly for **macOS**, which is the primary target and g
 npm install
 npm test        # builds, then runs the node:test suite
 npm run scan    # build and run against your machine
+npm run bundle  # build release/dev-disk-doctor-X.Y.Z.tgz, the install bundle with dependencies inside
 ```
 
 The scanner core is in `src/core`, one file per area in `src/detectors`, the worktree audit in `src/worktrees`, and the MCP server in `src/mcp.ts`. See [PLAN.md](PLAN.md) for the design.

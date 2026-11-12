@@ -1,6 +1,7 @@
 name: Release
 
-# Stages a release on npm when a version tag is pushed (see docs/RELEASING.md):
+# Stages a release on npm when a version tag is pushed, and attaches an install-anywhere bundle
+# (the package with its dependencies packed inside) to the GitHub release (see docs/RELEASING.md):
 #   bump the version in a PR, merge it, then
 #   git tag vX.Y.Z && git push origin vX.Y.Z
 # auto-release.yml starts it with workflow_dispatch on the tag it just pushed, because a tag
@@ -35,11 +36,18 @@ jobs:
             exit 1
           fi
       - run: npm test
+      # The same package with its dependencies packed inside, for machines that cannot reach npm.
+      # Attached to the GitHub release twice: under its versioned name, and as dev-disk-doctor.tgz
+      # so that releases/latest/download/dev-disk-doctor.tgz always points at the newest one.
+      - name: Build the install bundle
+        run: |
+          npm run bundle
+          cp "release/dev-disk-doctor-${GITHUB_REF_NAME#v}.tgz" release/dev-disk-doctor.tgz
       # Authenticates with npm through OIDC (trusted publisher for release.yml), so no token is stored.
       # The version is only staged: a maintainer approves it (with 2FA) on npmjs.com or with
       # `npm stage approve <stage-id>` before it goes live.
       - run: npm stage publish --provenance --access public
       - name: GitHub release
-        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag release/*.tgz
         env:
           GH_TOKEN: ${{ github.token }}
