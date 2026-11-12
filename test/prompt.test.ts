@@ -50,7 +50,7 @@ describe('first-run question', () => {
       const home = tmp();
       const t = fakeIo([answer]);
       assert.deepEqual(await askRoots(t.io, home, {}), { roots: [] });
-      assert.deepEqual(await readConfig(home), { roots: [], autoDiscover: true });
+      assert.deepEqual(await readConfig(home), { roots: [], autoDiscover: true, caches: [] });
       assert.equal(await hasRootsChoice(home, {}), true);
     }
   });

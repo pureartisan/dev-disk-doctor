@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { run } from './exec.js';
 import { diskInfo, scan } from './scan.js';
-import { isInside } from './util.js';
+import { assertSafeToRemove } from './safety.js';
 import type { Action, Finding, ScanOptions } from './types.js';
 
 export interface FixOutcome {
@@ -19,18 +19,7 @@ export interface FixOutcome {
   freedBytes?: number;
 }
 
-const PROTECTED_HOME_CHILDREN = new Set(['Documents', 'Desktop', 'Pictures', 'Movies', 'Music', 'Public', 'Applications', 'Library', 'Downloads']);
-
-/** Defence in depth: detectors only ever produce safe paths, but never trust that blindly. */
-export function assertSafeToRemove(target: string, opts: Pick<ScanOptions, 'home' | 'roots'>): void {
-  if (!path.isAbsolute(target)) throw new Error('Refusing to delete a relative path.');
-  const normalized = path.resolve(target);
-  if (normalized !== target.replace(/\/+$/, '') && normalized !== target) throw new Error('Refusing to delete a non-normalised path.');
-  if (!isInside(normalized, opts.home) || normalized === opts.home) throw new Error('Refusing to delete anything outside your home folder.');
-  const rel = path.relative(opts.home, normalized);
-  if (PROTECTED_HOME_CHILDREN.has(rel)) throw new Error(`Refusing to delete ~/${rel} itself.`);
-  if (opts.roots.some((r) => path.resolve(r) === normalized)) throw new Error('Refusing to delete a workspace root.');
-}
+export { assertSafeToRemove } from './safety.js';
 
 export function findAction(findings: Finding[], actionId: string): { finding: Finding; action: Action } | undefined {
   for (const finding of findings) {

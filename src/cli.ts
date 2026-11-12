@@ -2,7 +2,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { addSavedRoot, configPath, removeSavedRoot, resetConfig, saveAutoDiscover } from './core/config.js';
+import { addCustomCache, addSavedRoot, configPath, listCustomCaches, removeCustomCache, removeSavedRoot, resetConfig, saveAutoDiscover } from './core/config.js';
 import { applyAction, applySafe } from './core/fix.js';
 import { buildOptions, scan } from './core/scan.js';
 import { version } from './core/version.js';
@@ -24,6 +24,9 @@ Usage
   dev-disk-doctor roots remove <dir>  Forget a saved workspace folder
   dev-disk-doctor roots auto        Always figure the folders out (stops the first-run question)
   dev-disk-doctor roots reset       Forget every saved choice and ask again next time
+  dev-disk-doctor caches            List the caches you added yourself
+  dev-disk-doctor caches add <path> Add a cache folder the built-in list does not know (--label, --risk)
+  dev-disk-doctor caches remove <path>  Forget one you added
   dev-disk-doctor mcp              Start the MCP server on stdio (for AI agents)
 
 Options
@@ -36,8 +39,11 @@ Options
                          The first time, in a terminal, you are asked which to use. Run "roots" to see the result.
   --min-size <MB>        Ignore items smaller than this (default 100)
   --stale-days <n>       Days idle before a project or worktree counts as stale (default 30)
-  --only <detector>      Run one detector (docker, android, xcode, pkgcaches, browsers,
-                         models, projects, worktrees, system, biggest). Repeatable.
+  --only <detector>      Run one detector (docker, android, xcode, pkgcaches, devcaches, browsers,
+                         models, projects, worktrees, system, custom, discovery, biggest). Repeatable.
+  --label <text>         With "caches add": a name to show for the folder
+  --risk <safe|review>   With "caches add": safe if the tool rebuilds it (deletable by "fix safe"),
+                         review (default) if you want to look first
   --deep                 Also sweep your whole home folder for unknown space hogs (slow)
   --all                  Show every finding instead of the top 25
   --yes                  With "fix": actually run the action
@@ -55,6 +61,8 @@ interface Parsed {
   minMb?: number;
   staleDays?: number;
   only: string[];
+  label?: string;
+  risk?: 'safe' | 'review';
   deep: boolean;
   all: boolean;
   yes: boolean;
@@ -77,6 +85,12 @@ function parse(argv: string[]): Parsed {
     else if (a === '--min-size') p.minMb = Number(need(a));
     else if (a === '--stale-days') p.staleDays = Number(need(a));
     else if (a === '--only') p.only.push(need(a));
+    else if (a === '--label') p.label = need(a);
+    else if (a === '--risk') {
+      const v = need(a);
+      if (v !== 'safe' && v !== 'review') throw new Error('--risk must be safe or review.');
+      p.risk = v;
+    }
     else if (a === '--deep') p.deep = true;
     else if (a === '--all') p.all = true;
     else if (a === '--yes' || a === '-y') p.yes = true;
@@ -176,6 +190,23 @@ async function main(): Promise<void> {
       if (p.json) console.log(JSON.stringify({ roots: opts.roots }, null, 2));
       else if (opts.roots.length) console.log(opts.roots.join('\n'));
       else console.log('No workspace folders found under your home. Pass --root <dir>, set DEV_DISK_DOCTOR_ROOTS, or run "roots add <dir>".');
+      return;
+    }
+    case 'caches': {
+      const [sub, ...paths] = p.positional;
+      const home = os.homedir();
+      if (sub === 'add' || sub === 'remove') {
+        if (!paths.length) throw new Error(`caches ${sub} needs a folder, e.g. dev-disk-doctor caches ${sub} ~/.cache/my-tool`);
+        if (sub === 'add' && paths.length > 1 && p.label) throw new Error('--label names one folder; add them one at a time.');
+        for (const d of paths) sub === 'add' ? await addCustomCache(home, d, { label: p.label, risk: p.risk }) : await removeCustomCache(home, d);
+        console.log(sub === 'add' ? `Added. It shows up in the next scan; "fix" can delete it only if you marked it --risk safe, and always asks first without --yes.` : 'Removed.');
+        return;
+      }
+      if (sub !== undefined) throw new Error(`Unknown caches command "${sub}". Use: caches, caches add <path>, caches remove <path>.`);
+      const list = await listCustomCaches(home);
+      if (p.json) console.log(JSON.stringify({ caches: list }, null, 2));
+      else if (!list.length) console.log(`No caches added yet. Add one with: dev-disk-doctor caches add ~/.cache/my-tool --label "My tool" --risk safe\n(Stored in ${configPath(home)}.)`);
+      else for (const c of list) console.log(`${c.risk.padEnd(6)} ${c.path}${c.label ? `  (${c.label})` : ''}${c.problem ? `  [ignored: ${c.problem}]` : ''}`);
       return;
     }
     case 'scan': {

@@ -84,9 +84,12 @@ export async function scan(opts: ScanOptions): Promise<ScanResult> {
     }
   };
 
-  const quick = selected.filter((d) => !d.deepOnly);
+  const quick = selected.filter((d) => !d.deepOnly && !d.late);
+  const late = selected.filter((d) => !d.deepOnly && d.late);
   const deep = selected.filter((d) => d.deepOnly);
   await Promise.all(quick.map(runOne));
+  // Late detectors run one after another, in order, so each sees the findings of those before it.
+  for (const d of late) await runOne(d);
   if (opts.deep || (opts.only && deep.length)) await Promise.all(deep.map(runOne));
   else if (deep.length) skipped.push(...deep.map((d) => ({ detector: d.id, reason: 'Only runs with --deep (slow whole-home sweep).' })));
 

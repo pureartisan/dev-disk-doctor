@@ -1,14 +1,16 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { sizeOf } from '../core/size.js';
-import { isInside } from '../core/util.js';
 import type { Detector, Finding } from '../core/types.js';
-import { manualAction } from './helpers.js';
+import { explainedUnder, manualAction } from './helpers.js';
 
 /** Folders we look inside of, instead of reporting as one opaque lump. */
 function expandable(home: string): Set<string> {
   const lib = path.join(home, 'Library');
-  return new Set(['Containers', 'Application Support', 'Caches', 'Group Containers', 'Android'].map((n) => path.join(lib, n)).concat(lib));
+  const library = ['Containers', 'Application Support', 'Caches', 'Group Containers', 'Android'].map((n) => path.join(lib, n));
+  // Where unix tools park caches and data: one lump each would hide which tool is the culprit.
+  const dotFolders = ['.cache', '.config', '.local', '.local/share'].map((n) => path.join(home, n));
+  return new Set([lib, ...library, ...dotFolders]);
 }
 
 async function children(dir: string): Promise<string[]> {
@@ -43,10 +45,7 @@ export const biggest: Detector = {
       entries.map(async (p) => {
         const total = await sizeOf(p, opts.detectorTimeoutMs * 2);
         if (total === undefined) return;
-        const inside = known.filter((f) => isInside(f.path!, p));
-        // Findings that are themselves nested only count once.
-        const outer = inside.filter((f) => !inside.some((g) => g !== f && g.path !== f.path && isInside(f.path!, g.path!)));
-        const explained = outer.reduce((s, f) => s + f.bytes, 0);
+        const { bytes: explained, count } = explainedUnder(p, known);
         const remainder = total - explained;
         if (remainder < opts.minBytes) return;
         const id = `biggest:${p}`;
@@ -54,7 +53,7 @@ export const biggest: Detector = {
           id,
           detector: 'biggest',
           category: 'unknown',
-          title: `${p.replace(opts.home, '~')}${explained > 0 ? ` (excluding ${outer.length} item${outer.length === 1 ? '' : 's'} listed above)` : ''}`,
+          title: `${p.replace(opts.home, '~')}${explained > 0 ? ` (excluding ${count} item${count === 1 ? '' : 's'} listed above)` : ''}`,
           path: p,
           bytes: remainder,
           risk: 'review',
