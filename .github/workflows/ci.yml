@@ -20,3 +20,35 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  automerge-dependabot:
+    # Merges Dependabot minor/patch bumps once every test job has passed. Major bumps are left open.
+    needs: [test]
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write   # to ask for a release below
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge updates that contain no major bumps
+        id: merge
+        if: steps.metadata.outputs.dependency-names != '' && !contains(fromJSON(steps.metadata.outputs.updated-dependencies-json).*.updateType, 'version-update:semver-major')
+        run: gh pr merge --squash --delete-branch "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Only runtime dependencies change what users install. The workflow it starts does nothing
+      # unless the repository variable AUTO_RELEASE is "true" (see docs/RELEASING.md).
+      - name: Ask for a release when a runtime dependency changed
+        if: steps.merge.outcome == 'success' && contains(fromJSON(steps.metadata.outputs.updated-dependencies-json).*.dependencyType, 'direct:production')
+        run: gh workflow run auto-release.yml --repo "$GITHUB_REPOSITORY" --ref main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

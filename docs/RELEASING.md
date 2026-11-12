@@ -63,6 +63,27 @@ Changes reach `main` through PRs, so the version bump goes through one too, and 
 
 Version numbers on npm can never be reused. If a published version is bad, ship a fixed one and run `npm deprecate dev-disk-doctor@<bad> "use <fixed>"`.
 
+## Dependency updates and automatic releases
+
+[`.github/dependabot.yml`](../.github/dependabot.yml) opens a weekly PR for npm dependencies and one for GitHub Actions. Minor and patch bumps are grouped, and runtime dependencies are kept apart from dev dependencies.
+
+The `automerge-dependabot` job in [`ci.yml`](../.github/workflows/ci.yml) squash-merges a Dependabot PR once every test job has passed, unless it contains a **major** bump. Major bumps stay open for a person to review.
+
+### Auto release (off by default)
+
+Merging a dependency update does not release anything by itself. To have a patch release cut for updates that change what users install, turn on the switch:
+
+```bash
+gh variable set AUTO_RELEASE --body true -R pureartisan/dev-disk-doctor
+gh variable delete AUTO_RELEASE -R pureartisan/dev-disk-doctor     # off again
+```
+
+With it on, after Dependabot merges an update to a **runtime** dependency (`dependencies` in `package.json`), [`auto-release.yml`](../.github/workflows/auto-release.yml) bumps the patch version, commits `chore: release X.Y.Z` to `main`, pushes the tag and starts `release.yml` on it. Dev dependency, GitHub Actions and major updates never trigger it.
+
+This does not publish to the public registry on its own. `release.yml` still only **stages** the version on npm, and you approve it with 2FA as described below. Reject a staged version you do not want. Several merged updates in a row each produce their own version, so approve the newest and reject the rest.
+
+It pushes straight to `main`, which only works while `main` has no branch protection or ruleset that blocks the GitHub Actions bot.
+
 ## What the workflow does
 
 1. Checks out the tagged commit, updates npm to 11.x and runs `npm ci`.
