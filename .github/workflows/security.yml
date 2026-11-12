@@ -1,0 +1,32 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 8 * * 1"   # weekly, Mondays 08:00 UTC, to catch advisories published after the last merge
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      # Lifecycle scripts are skipped: auditing does not need them, and it avoids running dependency code in CI.
+      - run: npm ci --ignore-scripts
+      # Gate on what users install: runtime dependencies only.
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --omit=peer --omit=optional --audit-level=moderate
+      # Dev tooling is reported but does not fail the build.
+      - name: Audit the full dependency tree (informational)
+        run: npm audit --audit-level=high
+        continue-on-error: true

@@ -1,5 +1,11 @@
 # dev-disk-doctor
 
+[![npm version](https://img.shields.io/npm/v/dev-disk-doctor.svg)](https://www.npmjs.com/package/dev-disk-doctor)
+[![CI](https://github.com/pureartisan/dev-disk-doctor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/pureartisan/dev-disk-doctor/actions/workflows/ci.yml)
+[![Security](https://github.com/pureartisan/dev-disk-doctor/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/pureartisan/dev-disk-doctor/actions/workflows/security.yml)
+[![Node](https://img.shields.io/node/v/dev-disk-doctor.svg)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **Why is my disk full?** A read-only disk and git-worktree doctor for developer machines. It finds the space hogs (Docker, Android emulators, Xcode, `node_modules`, package caches, AI models, orphaned git worktrees), explains each one, and gives you a ready-to-run fix with a warning when one is needed.
 
 Works as a CLI and as an **MCP server**, so an AI agent (Claude Code, Cursor, Codex…) can run it, show you the options, and ask before touching anything.
