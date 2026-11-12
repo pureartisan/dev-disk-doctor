@@ -55,7 +55,8 @@ The examples below use the installed `dev-disk-doctor` command. If you did not i
    dev-disk-doctor fix safe
    dev-disk-doctor fix safe --yes
    ```
-   It lists the warnings to read first (such as "quit Chrome"), runs the biggest items first, and carries on if one fails. `REVIEW` items are never batched: pick those one at a time with their `run:` line.
+   It lists the warnings to read first (such as "quit Chrome"), runs the biggest items first, and carries on if one fails. `fix safe` never touches `REVIEW` items.
+   **Or pick from a checklist.** Run `dev-disk-doctor fix` with no id in a terminal. Every SAFE item starts ticked and every REVIEW item unticked. Scroll with the arrow keys or the mouse wheel, tick or untick with space or a click, press `a` for all, `n` for none, `s` for SAFE only and `r` to switch every REVIEW item on or off, then Enter. A summary lists the REVIEW items you ticked and the warnings, and nothing runs until you confirm it. Items that are instructions only, rated CAREFUL, or protected by macOS (like `~/Library/Logs`) are never offered.
 5. **Or let an AI agent drive it**; see [Use it with an AI agent](#use-it-with-an-ai-agent-mcp) below.
 
 ## Commands
@@ -66,6 +67,7 @@ The examples below use the installed `dev-disk-doctor` command. If you did not i
 | `dev-disk-doctor show` | Scroll through the last scan without scanning again (scans first if none is saved). Scroll with the arrow keys, space, `b`, `g`/`G` or the mouse wheel; `/` searches; `q` quits. |
 | `dev-disk-doctor worktrees` | Audit git worktrees across all your repos. Read-only. |
 | `dev-disk-doctor fix <action-id>` | Show what one action would do. Add `--yes` to run it. |
+| `dev-disk-doctor fix` | In a terminal, pick what to clean from a scrollable checklist. Asks to confirm before anything runs. |
 | `dev-disk-doctor fix safe` | The same for every SAFE item at once. Add `--yes` to run them. |
 | `dev-disk-doctor roots` | Show which workspace folders will be searched. |
 | `dev-disk-doctor roots add <dir>` | Remember a workspace folder for next time. |
@@ -111,7 +113,7 @@ dev-disk-doctor show --from 26 --count 25 --no-pager  # the second page of the l
 
 Every text scan is saved to `~/.dev-disk-doctor/last-scan.json` so `show` can list it again instantly. It is only ever displayed: `fix` always re-scans before it changes anything, and a successful `fix --yes` deletes the saved scan because its sizes are out of date by then. Sizes in a saved scan do not update on their own; `show --force` scans again.
 
-Nothing is deleted unless you run `fix <id> --yes` or `fix safe --yes`. Actions marked CAREFUL are never run by the tool.
+Nothing is deleted unless you run `fix <id> --yes`, `fix safe --yes`, or confirm the `fix` checklist. Actions marked CAREFUL are never run by the tool.
 
 ## Where it looks for your projects
 

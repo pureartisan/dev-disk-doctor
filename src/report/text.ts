@@ -98,9 +98,9 @@ function batchLine(item: BatchItem, index: number, total: number, p: ReturnType<
 }
 
 /** Shown before a batch starts: how many actions and what to check first. */
-export function renderBatchPlan(count: number, warnings: string[], dryRun: boolean, style: Style): string {
+export function renderBatchPlan(count: number, warnings: string[], dryRun: boolean, style: Style, noun = 'SAFE item'): string {
   const p = paint(style);
-  const out = [p.bold(`${dryRun ? 'Dry run: would clean' : 'Cleaning'} ${count} SAFE item${count === 1 ? '' : 's'}`)];
+  const out = [p.bold(`${dryRun ? 'Dry run: would clean' : 'Cleaning'} ${count} ${noun}${count === 1 ? '' : 's'}`)];
   if (warnings.length) {
     out.push(p.yellow('Check before you run this:'));
     for (const w of warnings) out.push(p.yellow(`  ! ${w}`));

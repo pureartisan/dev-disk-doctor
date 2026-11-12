@@ -100,8 +100,8 @@ export interface BatchOutcome {
  * The actions `fix safe` runs: runnable, and rated safe on both the finding and the action.
  * Review-rated items are never batched; the user picks those one at a time.
  */
-export function safeActions(findings: Finding[]): { finding: Finding; action: Action }[] {
-  const picked: { finding: Finding; action: Action }[] = [];
+export function safeActions(findings: Finding[]): PlanItem[] {
+  const picked: PlanItem[] = [];
   for (const finding of findings) {
     if (finding.risk !== 'safe') continue;
     for (const action of finding.actions) {
@@ -112,14 +112,38 @@ export function safeActions(findings: Finding[]): { finding: Finding; action: Ac
 }
 
 export interface BatchHooks {
-  onPlan?: (plan: { finding: Finding; action: Action }[], warnings: string[]) => void;
+  onPlan?: (plan: PlanItem[], warnings: string[]) => void;
   onItem?: (item: BatchItem, index: number, total: number) => void;
+}
+
+export interface PlanItem {
+  finding: Finding;
+  action: Action;
+}
+
+/**
+ * Every action the checklist may offer: runnable, and neither the finding nor the action rated danger.
+ * Instructions-only actions and anything protected never appear, so they cannot be ticked.
+ */
+export function runnableActions(findings: Finding[]): PlanItem[] {
+  const picked: PlanItem[] = [];
+  for (const finding of findings) {
+    if (finding.risk === 'danger') continue;
+    for (const action of finding.actions) {
+      if (action.risk !== 'danger' && action.kind.type !== 'manual') picked.push({ finding, action });
+    }
+  }
+  return picked;
 }
 
 /** Scans once, then runs every safe action, largest first. A failure does not stop the rest. Dry run unless `confirm`. */
 export async function applySafe(opts: ScanOptions, confirm = false, hooks: BatchHooks = {}): Promise<BatchOutcome> {
   const result = await scan(opts);
-  const plan = safeActions(result.findings);
+  return applyPlan(opts, safeActions(result.findings), confirm, hooks);
+}
+
+/** Runs the given actions in order. A failure does not stop the rest. Dry run unless `confirm`. */
+export async function applyPlan(opts: ScanOptions, plan: PlanItem[], confirm = false, hooks: BatchHooks = {}): Promise<BatchOutcome> {
   const warnings = [...new Set(plan.flatMap((p) => (p.action.warning ? [p.action.warning] : [])))];
   hooks.onPlan?.(plan, warnings);
 
