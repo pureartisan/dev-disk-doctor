@@ -13,7 +13,8 @@ function fixture() {
   write(path.join(home, '.cache/uv/data.bin'));
   write(path.join(home, 'app/package.json'), '{}');
   write(path.join(home, 'app/node_modules/dep/index.js'));
-  return { home, o: opts(home, { staleDays: 100_000 }) };
+  // Only these detectors: a real docker daemon on the host would otherwise add (and, with confirm, run) its own actions.
+  return { home, o: opts(home, { staleDays: 100_000, only: ['pkgcaches', 'projects'] }) };
 }
 
 describe('fix safe', () => {
@@ -43,7 +44,7 @@ describe('fix safe', () => {
   });
 
   it('reports nothing to do on a clean home', async () => {
-    const b = await applySafe(opts(tmp(), { roots: [] }), true);
+    const b = await applySafe(opts(tmp(), { roots: [], only: ['pkgcaches'] }), true);
     assert.deepEqual(b.items, []);
     assert.equal(b.ok, true);
   });

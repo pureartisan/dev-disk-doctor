@@ -19,7 +19,7 @@ npx -y dev-disk-doctor worktrees --json     # git worktree audit
 npx -y dev-disk-doctor scan --deep --json   # also sweeps the whole home folder (slow, ask first)
 ```
 
-Add `--root <dir>` if the user keeps projects somewhere unusual.
+Add `--root <dir>` if the user keeps projects somewhere unusual. To make it stick, run `dev-disk-doctor roots add <dir>` (saved in `~/.dev-disk-doctor/config`, ask the user first since it writes a file).
 
 ## 2. Present options
 

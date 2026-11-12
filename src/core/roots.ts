@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { readSavedRoots } from './config.js';
 import { expandHome, isDir } from './util.js';
 
 /** Folder names people commonly keep code in. Always included when present. */
@@ -40,7 +41,8 @@ async function looksLikeWorkspace(dir: string): Promise<boolean> {
  * Where to look for projects and git repos.
  *
  * 1. `DEV_DISK_DOCTOR_ROOTS` (colon-separated) replaces everything below.
- * 2. Otherwise: common names (`~/dev`, `~/code`, `~/src`…) plus every other visible folder directly
+ * 2. Folders saved with `dev-disk-doctor roots add` (`~/.dev-disk-doctor/config`) replace everything below.
+ * 3. Otherwise: common names (`~/dev`, `~/code`, `~/src`…) plus every other visible folder directly
  *    under your home that contains a git repo or project within three levels. That is how a company
  *    folder such as `~/acme` is found without configuration.
  *
@@ -52,6 +54,13 @@ export async function defaultRoots(home: string, env: NodeJS.ProcessEnv = proces
     const resolved = fromEnv.map((r) => path.resolve(expandHome(r, home)));
     const existing: string[] = [];
     for (const r of resolved) if (await isDir(r)) existing.push(r);
+    return existing;
+  }
+
+  const saved = await readSavedRoots(home);
+  if (saved.length) {
+    const existing: string[] = [];
+    for (const r of saved) if (await isDir(r)) existing.push(r);
     return existing;
   }
 

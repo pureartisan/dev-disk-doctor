@@ -35,7 +35,7 @@ You need [Node.js](https://nodejs.org) 18 or newer. Nothing else to install.
    It lists the warnings to read first (such as "quit Chrome"), runs the biggest items first, and carries on if one fails. `REVIEW` items are never batched: pick those one at a time with their `run:` line.
 5. **Or let an AI agent drive it**; see [Use it with an AI agent](#use-it-with-an-ai-agent-mcp) below.
 
-To install it globally instead of using `npx`: `npm install -g dev-disk-doctor`, then run `dev-disk-doctor`.
+`npx` runs the tool without installing it, so a plain `dev-disk-doctor` command is not available afterwards. To get that command, install it globally: `npm install -g dev-disk-doctor`, then run `dev-disk-doctor`.
 
 ## Where it looks for your projects
 
@@ -52,15 +52,28 @@ See what it will use:
 npx dev-disk-doctor roots
 ```
 
+The first time you run a scan in a terminal, it asks where to look: figure it out (and remember that), type your folders (and remember them), type folders for this run only, or skip. It never asks when you pass `--root` or `--json`, when output is piped, in the MCP server, or once a choice is saved. `roots reset` makes it ask again.
+
 Override it when your code lives somewhere else (for example `~/Documents/GitHub` or an external drive):
 
 ```bash
-npx dev-disk-doctor --root ~/Documents/GitHub --root /Volumes/Work/code
-# or, for every run:
-export DEV_DISK_DOCTOR_ROOTS="$HOME/Documents/GitHub:/Volumes/Work/code"
+npx dev-disk-doctor --root ~/Documents/GitHub --root /Volumes/Work/code   # this run only
+npx dev-disk-doctor roots add ~/Documents/GitHub                          # remember it for every run
+npx dev-disk-doctor roots remove ~/Documents/GitHub                       # forget it again
+npx dev-disk-doctor roots auto                                            # always figure it out, don't ask
+npx dev-disk-doctor roots reset                                           # forget every saved choice
 ```
 
-When you pass `--root` or set `DEV_DISK_DOCTOR_ROOTS`, auto-discovery is turned off and only those folders are searched.
+Saved choices live in `~/.dev-disk-doctor/config`, a small JSON file (`{ "roots": ["/Users/you/Documents/GitHub"] }`, plus `"autoDiscover": true` if you chose "figure it out") you can also edit by hand. The CLI and the MCP server both read it. Folders that no longer exist are skipped but stay in the file. Your home folder itself and `/` cannot be saved.
+
+You can also set `DEV_DISK_DOCTOR_ROOTS="$HOME/Documents/GitHub:/Volumes/Work/code"` in your shell profile.
+
+The first one that applies wins, and it turns auto-discovery off so only those folders are searched:
+
+1. `--root` (or the `roots` argument of the MCP tools)
+2. `DEV_DISK_DOCTOR_ROOTS`
+3. folders saved with `roots add`
+4. auto-discovery
 
 ## What it checks
 
@@ -115,6 +128,10 @@ dev-disk-doctor worktrees         Audit git worktrees across all your repos
 dev-disk-doctor fix <action-id>   Show what an action does; add --yes to run it
 dev-disk-doctor fix safe          The same for every SAFE item at once
 dev-disk-doctor roots             Show which workspace folders will be searched
+dev-disk-doctor roots add <dir>   Remember a workspace folder for next time
+dev-disk-doctor roots remove <dir>  Forget a saved workspace folder
+dev-disk-doctor roots auto        Always figure the folders out (stops the first-run question)
+dev-disk-doctor roots reset       Forget every saved choice and ask again next time
 dev-disk-doctor mcp               Start the MCP server on stdio
 
 --json  --root <dir>  --min-size <MB>  --stale-days <n>  --only <detector>  --deep  --all  --yes
