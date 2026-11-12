@@ -1,0 +1,44 @@
+name: Auto release
+
+# Cuts a patch release after a Dependabot update to a runtime dependency was merged by ci.yml.
+# Off by default: it only runs when the repository variable AUTO_RELEASE is "true".
+#   gh variable set AUTO_RELEASE --body true     # on
+#   gh variable delete AUTO_RELEASE              # off
+#
+# This only bumps the version and pushes the tag. Release.yml then stages the package on npm,
+# and a maintainer still approves it there with 2FA (see docs/RELEASING.md).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # push the version bump and the tag
+  actions: write    # start release.yml (a tag pushed with GITHUB_TOKEN does not trigger it)
+
+concurrency:
+  group: auto-release
+
+jobs:
+  release:
+    if: vars.AUTO_RELEASE == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Bump the patch version and tag it
+        id: bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          version="$(npm version patch --no-git-tag-version)"
+          git commit -am "chore: release ${version#v}"
+          git tag "$version"
+          git push origin HEAD:main "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Start the release workflow on the new tag
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$VERSION"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.bump.outputs.version }}
