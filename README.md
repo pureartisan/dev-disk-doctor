@@ -21,10 +21,10 @@ dev-disk-doctor --version           # check it worked
 
 - **Update:** `npm install -g dev-disk-doctor@latest`
 - **Uninstall:** `npm uninstall -g dev-disk-doctor`
-- **Try it without installing:** `npx dev-disk-doctor`. `npx` runs the tool from a temporary cache and leaves no `dev-disk-doctor` command behind, so use `npm install -g` if you want the plain command.
+- **Try it without installing:** `npx dev-disk-doctor@latest`. `npx` runs the tool from a temporary cache and leaves no `dev-disk-doctor` command behind, so use `npm install -g` if you want the plain command. Keep the `@latest`: without it, `npx` may reuse an older copy it cached earlier.
 - If the shell says `dev-disk-doctor: command not found` after installing, the folder npm puts global commands in is not on your `PATH`. `npm config get prefix` shows it; add `<prefix>/bin` to `PATH`.
 
-The examples below use the installed `dev-disk-doctor` command. Put `npx` in front of them if you did not install it.
+The examples below use the installed `dev-disk-doctor` command. If you did not install it, replace `dev-disk-doctor` with `npx dev-disk-doctor@latest`.
 
 ## Getting started
 
@@ -188,12 +188,12 @@ Add to your MCP client config:
 ```json
 {
   "mcpServers": {
-    "dev-disk-doctor": { "command": "npx", "args": ["-y", "dev-disk-doctor", "mcp"] }
+    "dev-disk-doctor": { "command": "npx", "args": ["-y", "dev-disk-doctor@latest", "mcp"] }
   }
 }
 ```
 
-Claude Code: `claude mcp add dev-disk-doctor -- npx -y dev-disk-doctor mcp`
+Claude Code: `claude mcp add dev-disk-doctor -- npx -y dev-disk-doctor@latest mcp`
 
 If you installed it globally you can point the client at the installed command instead: `"command": "dev-disk-doctor", "args": ["mcp"]`.
 

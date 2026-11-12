@@ -14,9 +14,9 @@ Prefer the MCP tools if the `dev-disk-doctor` server is connected: `disk_scan`, 
 Otherwise use the CLI:
 
 ```bash
-npx -y dev-disk-doctor scan --json          # takes about a minute
-npx -y dev-disk-doctor worktrees --json     # git worktree audit
-npx -y dev-disk-doctor scan --deep --json   # also sweeps the whole home folder (slow, ask first)
+npx -y dev-disk-doctor@latest scan --json          # takes about a minute
+npx -y dev-disk-doctor@latest worktrees --json     # git worktree audit
+npx -y dev-disk-doctor@latest scan --deep --json   # also sweeps the whole home folder (slow, ask first)
 ```
 
 Add `--root <dir>` if the user keeps projects somewhere unusual. To make it stick, run `dev-disk-doctor roots add <dir>` (saved in `~/.dev-disk-doctor/config`, ask the user first since it writes a file).
@@ -35,7 +35,7 @@ For each item say: what it is, how big, what deleting it costs, and the exact co
 
 For each item the user approves:
 
-1. Dry run first: `apply_action` without `confirm`, or `npx -y dev-disk-doctor fix "<action id>"`.
+1. Dry run first: `apply_action` without `confirm`, or `npx -y dev-disk-doctor@latest fix "<action id>"`.
 2. Read the action's warning to the user (for example "quit Chrome first", "images that only exist locally are lost").
 3. Run for real only after they say yes to that item: `confirm: true`, or `--yes`.
 
