@@ -63,6 +63,7 @@ The examples below use the installed `dev-disk-doctor` command. If you did not i
 | Command | What it does |
 |---|---|
 | `dev-disk-doctor` (or `dev-disk-doctor scan`) | Scan for space hogs. Read-only. |
+| `dev-disk-doctor show` | Scroll through the last scan without scanning again (scans first if none is saved). Scroll with the arrow keys, space, `b`, `g`/`G` or the mouse wheel; `/` searches; `q` quits. |
 | `dev-disk-doctor worktrees` | Audit git worktrees across all your repos. Read-only. |
 | `dev-disk-doctor fix <action-id>` | Show what one action would do. Add `--yes` to run it. |
 | `dev-disk-doctor fix safe` | The same for every SAFE item at once. Add `--yes` to run them. |
@@ -89,6 +90,10 @@ Options (they go after the command):
 | `--only <detector>` | Run one detector: `docker`, `android`, `xcode`, `pkgcaches`, `devcaches`, `browsers`, `models`, `projects`, `worktrees`, `system`, `custom`, `discovery` or `biggest`. Repeatable. `discovery` and `biggest` subtract what the others find, so they list known caches as unrecognised unless run together with them. |
 | `--deep` | Also sweep your whole home folder for unknown space hogs. Slow. |
 | `--all` | Show every finding instead of the top 25. |
+| `--from <n>`, `--count <n>` | With `show`: start at item `n` and list `n` items, to page through a long list. |
+| `--force` | With `show`: throw away the saved scan and scan again. |
+| `--no-pager` | With `show`: print instead of opening the scrollable view. Piped output is never paged. |
+| `--no-mouse` | With `show`: keyboard scrolling only. The mouse wheel works by default, which means selecting text needs Option (or Shift) held; this turns that off. |
 | `--yes` | With `fix`: actually run the action. Without it, `fix` is a dry run. |
 | `--label <text>` | With `caches add`: a name to show for the folder. |
 | `--risk <safe\|review>` | With `caches add`: `safe` if the owning tool rebuilds it (then `fix safe` may delete it), `review` (default) if you want to look first. |
@@ -101,7 +106,10 @@ dev-disk-doctor --only docker --only xcode      # just those two areas
 dev-disk-doctor --min-size 500 --all            # everything over 500 MB
 dev-disk-doctor worktrees --stale-days 14       # worktrees idle for two weeks
 dev-disk-doctor --json > scan.json              # for scripts and agents
+dev-disk-doctor show --from 26 --count 25 --no-pager  # the second page of the last scan
 ```
+
+Every text scan is saved to `~/.dev-disk-doctor/last-scan.json` so `show` can list it again instantly. It is only ever displayed: `fix` always re-scans before it changes anything, and a successful `fix --yes` deletes the saved scan because its sizes are out of date by then. Sizes in a saved scan do not update on their own; `show --force` scans again.
 
 Nothing is deleted unless you run `fix <id> --yes` or `fix safe --yes`. Actions marked CAREFUL are never run by the tool.
 

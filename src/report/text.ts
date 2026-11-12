@@ -32,7 +32,7 @@ function isRunnable(f: Finding, a: Action): boolean {
   return a.kind.type !== 'manual' && a.risk !== 'danger' && f.risk !== 'danger';
 }
 
-export function renderScan(r: ScanResult, style: Style, opts: { limit?: number; bin?: string } = {}): string {
+export function renderScan(r: ScanResult, style: Style, opts: { limit?: number; offset?: number; moreHint?: string; bin?: string } = {}): string {
   const bin = opts.bin ?? binName();
   const p = paint(style);
   const riskTag = (risk: Risk) => (risk === 'safe' ? p.green : risk === 'review' ? p.yellow : p.red)(`[${RISK_LABEL[risk]}]`);
@@ -52,9 +52,12 @@ export function renderScan(r: ScanResult, style: Style, opts: { limit?: number; 
   out.push('');
 
   const limit = opts.limit ?? 25;
-  const shown = r.findings.slice(0, limit);
-  shown.forEach((f, i) => out.push(renderFinding(f, i + 1, p, riskTag, bin)));
-  if (r.findings.length > shown.length) out.push(p.dim(`… ${r.findings.length - shown.length} smaller items hidden. Use --all to see everything.`));
+  const offset = opts.offset ?? 0;
+  const shown = r.findings.slice(offset, offset + limit);
+  shown.forEach((f, i) => out.push(renderFinding(f, offset + i + 1, p, riskTag, bin)));
+  const hidden = r.findings.length - offset - shown.length;
+  if (offset > 0 && shown.length === 0) out.push(p.dim(`Nothing at item ${offset + 1}: there are only ${r.findings.length}.`));
+  else if (hidden > 0) out.push(p.dim(`… ${hidden} ${offset > 0 ? 'more' : 'smaller'} items hidden. ${opts.moreHint ?? 'Use --all to see everything.'}`));
 
   if (r.skipped.length) {
     out.push('');
