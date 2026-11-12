@@ -4,15 +4,16 @@ import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { clearScan, describeAge, loadScan, saveScan } from './core/cache.js';
 import { addCustomCache, addSavedRoot, configPath, listCustomCaches, removeCustomCache, removeSavedRoot, resetConfig, saveAutoDiscover } from './core/config.js';
-import { applyAction, applySafe } from './core/fix.js';
+import { applyAction, applyPlan, applySafe, runnableActions } from './core/fix.js';
 import { buildOptions, scan } from './core/scan.js';
 import { version } from './core/version.js';
 import type { ScanOptions, ScanResult } from './core/types.js';
 import { expandHome } from './core/util.js';
+import { buildRows, runPicker, selectedPlan } from './picker.js';
 import { askRoots, type Io } from './prompt.js';
 import { page } from './report/pager.js';
 import { startSpinner } from './report/spinner.js';
-import { binName, renderBatchItem, renderBatchPlan, renderBatchSummary, renderScan, renderWorktrees } from './report/text.js';
+import { binName, renderBatchItem, renderBatchPlan, renderBatchSummary, renderFreedSpace, renderScan, renderWorktrees } from './report/text.js';
 import { auditWorktrees } from './worktrees/audit.js';
 
 const SCANNING = 'Scanning (read-only)… this can take a minute on a big disk.';
@@ -23,6 +24,7 @@ Usage
   dev-disk-doctor [scan]            Scan for space hogs (read-only)
   dev-disk-doctor show              Scroll through the last scan without scanning again (scans first if none is saved)
   dev-disk-doctor worktrees         Audit git worktrees across all your repos (read-only)
+  dev-disk-doctor fix               Pick what to clean from a checklist (SAFE items ticked, REVIEW items not)
   dev-disk-doctor fix <action-id>   Show what an action would do; add --yes to run it
   dev-disk-doctor fix safe          Same, for every SAFE item at once (add --yes to run them)
   dev-disk-doctor roots             Show which workspace folders will be searched
@@ -294,7 +296,33 @@ async function main(): Promise<void> {
     }
     case 'fix': {
       const id = p.positional[0];
-      if (!id) throw new Error(`fix needs an action id, e.g. ${binName()} fix "docker:build-cache#prune", or "safe" to clean every SAFE item`);
+      if (!id || id === 'pick') {
+        if (p.json || !process.stdin.isTTY || !process.stdout.isTTY) {
+          throw new Error(`fix needs an action id, e.g. ${binName()} fix "docker:build-cache#prune", or "safe" to clean every SAFE item. In a terminal, "fix" alone opens a checklist.`);
+        }
+        await askRootsIfNeeded(p);
+        const pickOpts = await options(p);
+        const style = { color: p.color };
+        const found = await scanWithSpinner(p, pickOpts);
+        const rows = buildRows(runnableActions(found.findings));
+        if (!rows.length) {
+          console.log('Nothing this tool can clean right now.');
+          return;
+        }
+        const chosen = await runPicker(rows, { stdin: process.stdin, stdout: process.stdout }, style);
+        if (!chosen) {
+          console.log('Cancelled. Nothing was changed.');
+          return;
+        }
+        const done = await applyPlan(pickOpts, selectedPlan(rows, chosen), true, {
+          onPlan: (items, warnings) => console.log(renderBatchPlan(items.length, warnings, false, style, 'selected item')),
+          onItem: (item, i, total) => console.log(renderBatchItem(item, i, total, style)),
+        });
+        await clearScan(pickOpts.home);
+        console.log(renderBatchSummary(done, style));
+        if (!done.ok) process.exitCode = 1;
+        return;
+      }
       const opts = await options(p);
       if (id === 'safe') {
         const text = !p.json;
@@ -325,7 +353,7 @@ async function main(): Promise<void> {
         if (res.command) console.log(`$ ${res.command}`);
         if (res.warning) console.log(`! ${res.warning}`);
         if (res.output) console.log(res.output);
-        if (res.freedBytes !== undefined && !res.dryRun) console.log(`Free space changed by ${(res.freedBytes / 1024 ** 3).toFixed(2)} GB.`);
+        if (res.freedBytes !== undefined && !res.dryRun) console.log(renderFreedSpace(res.freedBytes, { color: p.color }));
       }
       if (!res.ok) process.exitCode = 1;
       return;

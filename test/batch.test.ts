@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import { applySafe, safeActions } from '../src/core/fix.js';
 import { scan } from '../src/core/scan.js';
 import { execFileSync } from 'node:child_process';
-import { binName, quoteId, renderScan } from '../src/report/text.js';
+import { binName, quoteId, renderFreedSpace, renderScan } from '../src/report/text.js';
 import { opts, tmp, write } from './helpers.js';
 
 /** A home with one SAFE item (uv cache) and one REVIEW item (node_modules of a project active today). */
@@ -86,5 +86,14 @@ describe('scan report', () => {
   it('suggests npx only when launched through npx', () => {
     assert.equal(binName('/Users/me/.npm/_npx/abc/node_modules/dev-disk-doctor/dist/src/cli.js'), 'npx dev-disk-doctor');
     assert.equal(binName('/usr/local/lib/node_modules/dev-disk-doctor/dist/src/cli.js'), 'dev-disk-doctor');
+  });
+});
+
+describe('freed space line', () => {
+  it('is bold green when space was freed, and plain with colour off or nothing freed', () => {
+    const GB = 1024 ** 3;
+    assert.equal(renderFreedSpace(2 * GB, { color: true }), '\u001b[1m\u001b[32mFree space changed by 2.00 GB.\u001b[0m\u001b[0m');
+    assert.equal(renderFreedSpace(2 * GB, { color: false }), 'Free space changed by 2.00 GB.');
+    assert.equal(renderFreedSpace(0, { color: true }), 'Free space changed by 0.00 GB.');
   });
 });

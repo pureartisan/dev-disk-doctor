@@ -109,9 +109,9 @@ function batchLine(item: BatchItem, index: number, total: number, p: ReturnType<
 }
 
 /** Shown before a batch starts: how many actions and what to check first. */
-export function renderBatchPlan(count: number, warnings: string[], dryRun: boolean, style: Style): string {
+export function renderBatchPlan(count: number, warnings: string[], dryRun: boolean, style: Style, noun = 'SAFE item'): string {
   const p = paint(style);
-  const out = [p.bold(`${dryRun ? 'Dry run: would clean' : 'Cleaning'} ${count} SAFE item${count === 1 ? '' : 's'}`)];
+  const out = [p.bold(`${dryRun ? 'Dry run: would clean' : 'Cleaning'} ${count} ${noun}${count === 1 ? '' : 's'}`)];
   if (warnings.length) {
     out.push(p.yellow('Check before you run this:'));
     for (const w of warnings) out.push(p.yellow(`  ! ${w}`));
@@ -124,11 +124,18 @@ export function renderBatchItem(item: BatchItem, index: number, total: number, s
   return batchLine(item, index, total, paint(style));
 }
 
+/** "Free space changed by 1.23 GB.", in bold green when space was actually freed. */
+export function renderFreedSpace(bytes: number, style: Style): string {
+  const p = paint(style);
+  const line = `Free space changed by ${(bytes / 1024 ** 3).toFixed(2)} GB.`;
+  return bytes > 0 ? p.bold(p.green(line)) : line;
+}
+
 export function renderBatchSummary(b: BatchOutcome, style: Style, bin = binName()): string {
   const p = paint(style);
   if (!b.items.length) return 'Nothing safe to clean right now.';
   if (b.dryRun) return `\n${p.dim('Nothing was changed.')} Run ${p.cyan(`${bin} fix safe --yes`)} to do all of the above.`;
-  const freed = b.freedBytes !== undefined ? ` Free space changed by ${(b.freedBytes / 1024 ** 3).toFixed(2)} GB.` : '';
+  const freed = b.freedBytes !== undefined ? ` ${renderFreedSpace(b.freedBytes, style)}` : '';
   const failed = b.failed ? p.red(` ${b.failed} failed; see ✗ above.`) : '';
   return `\nDone: ${b.items.length - b.failed} of ${b.items.length} cleaned.${failed}${freed}`;
 }
