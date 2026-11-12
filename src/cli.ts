@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import path from 'node:path';
-import { applyAction } from './core/fix.js';
+import { applyAction, applySafe } from './core/fix.js';
 import { buildOptions, scan } from './core/scan.js';
 import { version } from './core/version.js';
 import type { ScanOptions } from './core/types.js';
 import { expandHome } from './core/util.js';
-import { renderScan, renderWorktrees } from './report/text.js';
+import { binName, renderBatchItem, renderBatchPlan, renderBatchSummary, renderScan, renderWorktrees } from './report/text.js';
 import { auditWorktrees } from './worktrees/audit.js';
 
 const HELP = `dev-disk-doctor: find out why your developer machine's disk is full
@@ -14,6 +14,7 @@ Usage
   dev-disk-doctor [scan]            Scan for space hogs (read-only)
   dev-disk-doctor worktrees         Audit git worktrees across all your repos (read-only)
   dev-disk-doctor fix <action-id>   Show what an action would do; add --yes to run it
+  dev-disk-doctor fix safe          Same, for every SAFE item at once (add --yes to run them)
   dev-disk-doctor roots             Show which workspace folders will be searched
   dev-disk-doctor mcp               Start the MCP server on stdio (for AI agents)
 
@@ -33,7 +34,8 @@ Options
   --no-color             Plain output
   -v, --version          Print the version
 
-Nothing is deleted unless you run "fix <id> --yes". Actions marked CAREFUL are never run by the tool.`;
+Nothing is deleted unless you run "fix <id> --yes" or "fix safe --yes". REVIEW items are only run
+one at a time, by id. Actions marked CAREFUL are never run by the tool.`;
 
 interface Parsed {
   command: string;
@@ -127,8 +129,20 @@ async function main(): Promise<void> {
     }
     case 'fix': {
       const id = p.positional[0];
-      if (!id) throw new Error('fix needs an action id, e.g. dev-disk-doctor fix "docker:build-cache#prune"');
+      if (!id) throw new Error(`fix needs an action id, e.g. ${binName()} fix "docker:build-cache#prune", or "safe" to clean every SAFE item`);
       const opts = await options(p);
+      if (id === 'safe') {
+        const text = !p.json;
+        const style = { color: p.color };
+        if (text) console.error('Scanning (read-only)… this can take a minute on a big disk.');
+        const batch = await applySafe(opts, p.yes, {
+          onPlan: (plan, warnings) => text && plan.length && console.log(renderBatchPlan(plan.length, warnings, !p.yes, style)),
+          onItem: (item, i, total) => text && console.log(renderBatchItem(item, i, total, style)),
+        });
+        console.log(p.json ? JSON.stringify(batch, null, 2) : renderBatchSummary(batch, style));
+        if (!batch.ok) process.exitCode = 1;
+        return;
+      }
       const res = await applyAction(opts, id, p.yes);
       if (p.json) console.log(JSON.stringify(res, null, 2));
       else {

@@ -57,7 +57,12 @@ export async function applyAction(opts: ScanOptions, actionId: string, confirm =
   if (!hit) {
     return { ...base, ok: false, dryRun: true, message: `No action "${actionId}" exists any more. It may already be done, or the state changed. Run a new scan.` };
   }
-  const { finding, action } = hit;
+  return runAction(opts, hit.finding, hit.action, confirm);
+}
+
+/** Runs one action from a fresh scan. Every guard lives here so single and batch fixes cannot diverge. */
+async function runAction(opts: ScanOptions, finding: Finding, action: Action, confirm: boolean): Promise<FixOutcome> {
+  const base = { dryRun: !confirm, findingId: finding.id, actionId: action.id };
   const common = { command: action.display, warning: action.warning };
 
   if (action.kind.type === 'manual') return { ...base, ...common, ok: false, dryRun: true, message: 'This one is instructions only; the tool never applies it. Run it yourself if you decide to.' };
@@ -81,4 +86,70 @@ export async function applyAction(opts: ScanOptions, actionId: string, confirm =
   } catch (e) {
     return { ...base, ...common, ok: false, dryRun: false, message: e instanceof Error ? e.message : String(e) };
   }
+}
+
+export interface BatchItem {
+  title: string;
+  bytes: number;
+  outcome: FixOutcome;
+}
+
+export interface BatchOutcome {
+  /** True when nothing was changed (default). */
+  dryRun: boolean;
+  /** False if any action failed. */
+  ok: boolean;
+  items: BatchItem[];
+  failed: number;
+  /** Distinct warnings from the selected actions, to read before confirming. */
+  warnings: string[];
+  /** Free space gained across the whole run, when it was applied and measurable. */
+  freedBytes?: number;
+}
+
+/**
+ * The actions `fix safe` runs: runnable, and rated safe on both the finding and the action.
+ * Review-rated items are never batched; the user picks those one at a time.
+ */
+export function safeActions(findings: Finding[]): { finding: Finding; action: Action }[] {
+  const picked: { finding: Finding; action: Action }[] = [];
+  for (const finding of findings) {
+    if (finding.risk !== 'safe') continue;
+    for (const action of finding.actions) {
+      if (action.risk === 'safe' && action.kind.type !== 'manual') picked.push({ finding, action });
+    }
+  }
+  return picked;
+}
+
+export interface BatchHooks {
+  onPlan?: (plan: { finding: Finding; action: Action }[], warnings: string[]) => void;
+  onItem?: (item: BatchItem, index: number, total: number) => void;
+}
+
+/** Scans once, then runs every safe action, largest first. A failure does not stop the rest. Dry run unless `confirm`. */
+export async function applySafe(opts: ScanOptions, confirm = false, hooks: BatchHooks = {}): Promise<BatchOutcome> {
+  const result = await scan(opts);
+  const plan = safeActions(result.findings);
+  const warnings = [...new Set(plan.flatMap((p) => (p.action.warning ? [p.action.warning] : [])))];
+  hooks.onPlan?.(plan, warnings);
+
+  const before = confirm ? await diskInfo(opts.home) : undefined;
+  const items: BatchItem[] = [];
+  for (const [i, { finding, action }] of plan.entries()) {
+    const outcome = await runAction(opts, finding, action, confirm);
+    const item = { title: finding.title, bytes: finding.bytes, outcome };
+    items.push(item);
+    hooks.onItem?.(item, i, plan.length);
+  }
+  const after = confirm ? await diskInfo(opts.home) : undefined;
+  const failed = items.filter((i) => !i.outcome.ok).length;
+  return {
+    dryRun: !confirm,
+    ok: failed === 0,
+    items,
+    failed,
+    warnings,
+    freedBytes: before && after ? Math.max(0, after.freeBytes - before.freeBytes) : undefined,
+  };
 }

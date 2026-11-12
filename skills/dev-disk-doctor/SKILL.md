@@ -39,7 +39,7 @@ For each item the user approves:
 2. Read the action's warning to the user (for example "quit Chrome first", "images that only exist locally are lost").
 3. Run for real only after they say yes to that item: `confirm: true`, or `--yes`.
 
-One approval covers one action, not a batch and not later items.
+One approval covers one action, not a batch and not later items. The CLI also has `fix safe [--yes]`, which runs every SAFE item at once; only use it when the user has asked for exactly that, after showing them the dry run.
 
 ## Rules
 
